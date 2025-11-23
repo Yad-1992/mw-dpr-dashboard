@@ -3,7 +3,29 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
-import os
+
+
+# ───────────────────── PASSWORD PROTECTION ─────────────────────
+def check_password():
+    def password_entered():
+        if st.session_state["password"] == "APTGMW2025":   # ← CHANGE THIS TO YOUR PASSWORD
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]
+        else:
+            st.session_state["password_correct"] = False
+    if "password_correct" not in st.session_state:
+        st.title("AP & TG MW DPR – Secure Access")
+        st.text_input("Enter Password", type="password", on_change=password_entered, key="password")
+        return False
+    elif not st.session_state["password_correct"]:
+        st.text_input("Wrong Password", type="password", on_change=password_entered, key="password")
+        st.error("Access Denied")
+        return False
+    else:
+        return True
+
+if not check_password():
+    st.stop()
 
 # ───────────────────── PAGE & SIDEBAR ─────────────────────
 st.set_page_config(page_title="AP-TG MW DPR", page_icon="satellite", layout="wide")
