@@ -29,23 +29,31 @@ st.markdown(f"""
     .kpi-pct {{font-size:10px; color:#64748b; font-weight:bold; margin:0;}}
 </style>
 """, unsafe_allow_html=True)
-
-# ───────────────────── LOAD DATA ─────────────────────
-file_path = "D:/Excel_to_GoogleSheets_Sync/AP-TG MW DPR.xlsm"
-if not os.path.exists(file_path):
-    st.error("File not found!\nPlace your Excel at:\n`D:/Excel_to_GoogleSheets_Sync/AP-TG MW DPR.xlsm`")
-    st.stop()
-
-@st.cache_data(ttl=60)
+# ───────────────────── LIVE DATA FROM GOOGLE SHEET (REAL-TIME) ─────────────────────
+@st.cache_data(ttl=60)  # Auto-refresh every 60 seconds
 def load_data():
-    df = pd.read_excel(file_path, sheet_name="Circle_DPR")
+    # Your exact Google Sheet ID
+    sheet_id = "1BD-Bww-k_3jVwJAGqBbs02YcOoUyNrOWcY_T9xvnbgY"
+    gid = "0"  # Circle_DPR tab (gid=0 from your link)
+    
+    csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
+    
+    df = pd.read_csv(csv_url)
+    
+    # Convert all date columns automatically
     date_cols = df.columns[df.columns.str.contains("Date|DATE", case=False)]
     for col in date_cols:
         df[col] = pd.to_datetime(df[col], errors='coerce')
+    
     return df
 
-df = load_data()
-
+try:
+    df = load_data()
+    st.sidebar.success(f"Live from Google Sheet\n{len(df):,} hops loaded\nAuto-refresh every 60s")
+except Exception as e:
+    st.error("Could not connect to Google Sheet. Check sharing settings.")
+    st.info("Make sure your sheet is shared as: **Anyone with the link can view**")
+    st.stop()
 # ───────────────────── FILTERS ─────────────────────
 st.sidebar.markdown("### Filters")
 date_columns = [col for col in df.columns if "Date" in col or "DATE" in col]
