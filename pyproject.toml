@@ -3,6 +3,9 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
+name = "ap-mw-dpr-dashboard"
+version = "1.0.0"
+description = "AP & TG MW DPR Live Dashboard"
 dependencies = [
     "streamlit==1.51.0",
     "pandas==2.3.3",
