@@ -613,7 +613,7 @@ with col2:
 st.markdown("---")
 st.markdown("### Summary Pivot Table – Live from Google Sheet (Exactly Like Excel)")
 
-custom_col = "CustomMonth"
+custom_col = "Month"
 
 if custom_col not in df.columns:
     st.error("Column 'CustomMonth' not found in your sheet!")
