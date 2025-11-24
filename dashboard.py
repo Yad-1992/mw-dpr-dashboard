@@ -1,4 +1,4 @@
-# dashboard.py — FINAL VERSION (Updated Sidebar Filters)
+# dashboard.py — FINAL VERSION (Light Mode Enforced)
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -28,31 +28,21 @@ if not check_password():
     st.stop()
 
 # ───────────────────── PAGE SETUP ─────────────────────
-st.set_page_config(page_title="AP-TG MW DPR", page_icon="📈", layout="wide")
+st.set_page_config(page_title="AP-TG MW DPR", page_icon="📡", layout="wide")
 
-# ───────────────────── SIDEBAR & THEME ─────────────────────
+# ───────────────────── SIDEBAR ─────────────────────
 st.sidebar.title("MW DPR Dashboard")
 st.sidebar.markdown("**Live • Auto-refresh**")
 st.sidebar.image("https://companieslogo.com/img/orig/NOK_BIG-8604230c.png?t=1720244493", use_container_width=True)
 
-# Theme Selector
-theme = st.sidebar.radio("Theme Mode", ["Dark", "Light"], horizontal=True, index=0)
-
-# Define Colors based on Theme
-if theme == "Dark":
-    main_bg = "#0e1117"
-    card_bg = "#1e293b"
-    text_color = "#ffffff"
-    sub_text = "#cbd5e1"
-    border_color = "#334155"
-    pending_color = "#f59e0b"
-else:
-    main_bg = "#f1f5f9"
-    card_bg = "#ffffff"
-    text_color = "#0f172a"
-    sub_text = "#64748b"
-    border_color = "#e2e8f0"
-    pending_color = "#d97706"
+# ───────────────────── THEME SETTINGS (LIGHT MODE ONLY) ─────────────────────
+# Hardcoded Light Mode Colors
+main_bg = "#f1f5f9"      # Light Grey Background
+card_bg = "#ffffff"      # White Cards
+text_color = "#0f172a"   # Dark Blue/Black Text
+sub_text = "#64748b"     # Slate Grey Subtext
+border_color = "#e2e8f0" # Light Border
+pending_color = "#d97706"# Amber for alerts
 
 # ───────────────────── CUSTOM CSS ─────────────────────
 st.markdown(f"""
@@ -157,7 +147,7 @@ except Exception as e:
     st.error("Could not connect to Google Sheet.")
     st.stop()
 
-# ───────────────────── FILTERS (UPDATED) ─────────────────────
+# ───────────────────── FILTERS ─────────────────────
 st.sidebar.markdown("### 🔍 Filters")
 
 # 1. Standard Filters
@@ -175,7 +165,6 @@ else:
     selected_nominal = []
 
 if "Final Remarks" in df.columns:
-    # Using astype(str) to handle potential mixed types
     remarks_options = sorted(df["Final Remarks"].dropna().astype(str).unique().tolist())
     selected_remarks = st.sidebar.multiselect("Final Remarks", remarks_options)
 else:
@@ -194,7 +183,6 @@ if selected_nominal:
     filtered = filtered[filtered["Nominal Aop"].astype(str).isin(selected_nominal)]
 if selected_remarks:
     filtered = filtered[filtered["Final Remarks"].astype(str).isin(selected_remarks)]
-
 
 # Status Logic
 def get_status(r):
@@ -297,7 +285,7 @@ if st.button("Open Full Summary Report", use_container_width=True, type="primary
 
 st.markdown("---")
 
-# ───────────────────── AGING TABS ─────────────────────
+# ───────────────────── EXACT ORIGINAL AGING TABS ─────────────────────
 st.markdown("### Aging Analysis")
 tab1, tab2, tab3, tab4 = st.tabs([
     "RFAI → MS1 (Integration)",
