@@ -468,16 +468,16 @@ if selected_cols:
         use_container_width=True,
         type="primary"
 
-# ───────────────────── PENDING HOPS DASHBOARD (LIVE) ─────────────────────
+# ───────────────────── PENDING HOPS TRACKER (LIVE) ─────────────────────
 st.markdown("---")
 st.markdown("### Pending Hops Tracker (Live & Auto-Updated)")
 
 # Calculate all pending categories
 rfai_offered = filtered[~filtered["ACTUAL HOP RFAI OFFERED DATE"].isna()]
-mo_done = filtered[~filtered["HOP MO DATE"].isna()]
-ic_done = filtered[~filtered["HOP I&C DATE"].isna()]
-ms1_done = filtered[~filtered["INTEGRATION DATE"].isna()]  # MS1 = Integration
-ms2_done = filtered[~filtered["HOP AT DATE"].isna()]      # MS2 = HOP AT
+mo_done      = filtered[~filtered["HOP MO DATE"].isna()]
+ic_done      = filtered[~filtered["HOP I&C DATE"].isna()]
+ms1_done     = filtered[~filtered["INTEGRATION DATE"].isna()]   # MS1 = Integration
+ms2_done     = filtered[~filtered["HOP AT DATE"].isna()]       # MS2 = HOP AT
 
 pending_rfai = filtered[filtered["ACTUAL HOP RFAI OFFERED DATE"].isna()]
 pending_mo   = rfai_offered[rfai_offered["HOP MO DATE"].isna()]
@@ -485,7 +485,7 @@ pending_ic   = mo_done[mo_done["HOP I&C DATE"].isna()]
 pending_ms1  = rfai_offered[rfai_offered["INTEGRATION DATE"].isna()]
 pending_ms2  = ms1_done[ms1_done["HOP AT DATE"].isna()]
 
-# Beautiful Pending Cards
+# Big pending cards
 cols = st.columns(5)
 pending_list = [
     ("RFAI PENDING", len(pending_rfai), "#ef4444", pending_rfai),
@@ -495,18 +495,18 @@ pending_list = [
     ("MS2 PENDING",  len(pending_ms2),  "#dc2626", pending_ms2)
 ]
 
-for i, (title, count, color, df_pending) in enumerate(pending_list):
+for i, (title, count, color, _) in enumerate(pending_list):
     with cols[i]:
         st.markdown(f"""
-        <div style="background:#1e1e1e; padding:20px; border-radius:15px; text-align:center; 
+        <div style="background:#1e1e1e; padding:20px; border-radius:15px; text-align:center;
                     border-left:8px solid {color}; box-shadow:0 6px 20px rgba(0,0,0,0.4); min-height:140px">
             <h2 style="margin:0; color:{color}; font-size:48px; font-weight:900">{count}</h2>
             <h5 style="margin:8px 0 0; color:#e0e0e0; font-weight:600">{title}</h5>
         </div>
         """, unsafe_allow_html=True)
 
-# Show details when clicked
-st.markdown("#### Click to view details & download list")
+# Buttons to view details
+st.markdown("#### Click any button to view & download list")
 c1, c2, c3, c4, c5 = st.columns(5)
 
 with c1:
@@ -526,7 +526,7 @@ with c5:
         st.session_state.pending_view = "MS2"
 
 # Show selected pending list
-if "pending_view" in st.session_state:
+if st.session_state.get("pending_view"):
     view = st.session_state.pending_view
     if view == "RFAI": df_show = pending_rfai
     elif view == "MO": df_show = pending_mo
@@ -534,21 +534,21 @@ if "pending_view" in st.session_state:
     elif view == "MS1": df_show = pending_ms1
     elif view == "MS2": df_show = pending_ms2
 
-    st.markdown(f"#### {view} PENDING HOPS")
-    display_cols = ["Circle", "HOP A-B", "SITE ID A", "SITE ID B", "Priority(P0/P1)", "CIRCLE_REMARK_1", "Final Remarks"]
-    df_display = df_show[display_cols].copy() if not df_show.empty else pd.DataFrame(columns=display_cols)
-    
+    st.markdown(f"### {view} PENDING HOPS")
+    cols_to_show = ["Circle", "HOP A-B", "SITE ID A", "SITE ID B", "Priority(P0/P1)", "CIRCLE_REMARK_1", "Final Remarks"]
+    df_display = df_show[cols_to_show].copy() if not df_show.empty else pd.DataFrame(columns=cols_to_show)
+
     st.dataframe(df_display, use_container_width=True, height=500)
-    
+
     csv = df_display.to_csv(index=False).encode()
     st.download_button(
-        f"Download {view} Pending List",
-        csv,
-        f"APTG_{view.replace(' ', '_')}_Pending_{datetime.now().strftime('%d%b%Y')}.csv",
-        "text/csv",
+        label=f"Download {view} Pending List",
+        data=csv,
+        file_name=f"APTG_{view.replace(' ', '_')}_Pending_{datetime.now().strftime('%d%b%Y')}.csv",
+        mime="text/csv",
         use_container_width=True
     )
-    
+
     if st.button("Close", use_container_width=True):
         del st.session_state.pending_view
         st.rerun()
