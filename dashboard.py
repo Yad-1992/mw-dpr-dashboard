@@ -614,7 +614,7 @@ st.markdown("---")
 st.markdown("### Weekly & Monthly Progress Tracker (Live)")
 
 # Your exact column name in the sheet
-custom_col = "CustomMonth"   # ← This is the real name in your Google Sheet
+custom_col = "Month"   # ← This is the real name in your Google Sheet
 
 if custom_col not in df.columns:
     st.warning(f"Column '{custom_col}' not found. Check column name in Google Sheet.")
