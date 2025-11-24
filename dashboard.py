@@ -32,7 +32,7 @@ st.set_page_config(page_title="AP-TG MW DPR", page_icon="📡", layout="wide")
 
 # ───────────────────── SIDEBAR & THEME ─────────────────────
 st.sidebar.title("MW DPR Dashboard")
-st.sidebar.markdown("**Live • Auto-refresh • Zero Maintenance**")
+st.sidebar.markdown("**Live • Auto-refresh**")
 st.sidebar.image("https://companieslogo.com/img/orig/NOK_BIG-8604230c.png?t=1720244493", use_container_width=True)
 
 # Theme Selector
@@ -197,7 +197,7 @@ filtered["Current Status"] = filtered.apply(get_status, axis=1)
 
 # ───────────────────── SUMMARY PAGE ─────────────────────
 if st.session_state.get("show_summary", False):
-    st.title("📋 MW DPR Milestone Summary Report")
+    st.title("MW DPR Milestone Summary Report")
     st.markdown(f"**Generated:** {datetime.now().strftime('%d %b %Y • %H:%M')}")
    
     total_scope = len(filtered) if len(filtered) > 0 else 1
@@ -237,7 +237,7 @@ if st.session_state.get("show_summary", False):
     st.stop()
 
 # ───────────────────── MAIN DASHBOARD UI ─────────────────────
-st.markdown("### 📊 MW DPR Milestone Progress")
+st.markdown("### MW DPR Milestone Progress")
 
 total_scope = len(filtered) if len(filtered) > 0 else 1
 rfa_i_offered = len(filtered[~filtered["ACTUAL HOP RFAI OFFERED DATE"].isna()])
@@ -287,7 +287,7 @@ if st.button("Open Full Summary Report", use_container_width=True, type="primary
 st.markdown("---")
 
 # ───────────────────── EXACT ORIGINAL AGING TABS ─────────────────────
-st.markdown("### ⏳ Aging Analysis")
+st.markdown("### Aging Analysis")
 tab1, tab2, tab3, tab4 = st.tabs([
     "RFAI → MS1 (Integration)",
     "MS1 → MS2 (HOP AT)",
@@ -481,7 +481,7 @@ if selected_cols:
 
 # ───────────────────── PENDING HOPS TRACKER (REVISED DAX LOGIC) ─────────────────────
 st.markdown("---")
-st.markdown("### 🚦 Pending Hops Tracker (DAX Logic)")
+st.markdown("### 🚦 Pending Hops")
 
 # Helper to calculate aging days safely
 def get_aging(df, start_col):
