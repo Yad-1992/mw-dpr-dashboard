@@ -1,8 +1,9 @@
-# dashboard.py — FINAL MERGED VERSION (Modern UI + Original Aging Logic)
+# dashboard.py — FINAL COMPLETE VERSION
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
+
 # ───────────────────── PASSWORD PROTECTION ─────────────────────
 def check_password():
     def password_entered():
@@ -11,6 +12,7 @@ def check_password():
             del st.session_state["password"]
         else:
             st.session_state["password_correct"] = False
+
     if "password_correct" not in st.session_state:
         st.title("AP & TG MW DPR – Secure Access")
         st.text_input("Enter Password", type="password", on_change=password_entered, key="password")
@@ -21,16 +23,21 @@ def check_password():
         return False
     else:
         return True
+
 if not check_password():
     st.stop()
+
 # ───────────────────── PAGE SETUP ─────────────────────
 st.set_page_config(page_title="AP-TG MW DPR", page_icon="📡", layout="wide")
+
 # ───────────────────── SIDEBAR & THEME ─────────────────────
 st.sidebar.title("MW DPR Dashboard")
 st.sidebar.markdown("**Live • Auto-refresh • Zero Maintenance**")
 st.sidebar.image("https://companieslogo.com/img/orig/NOK_BIG-8604230c.png?t=1720244493", use_container_width=True)
-# Theme Selector (Fixes Visibility Issues)
+
+# Theme Selector
 theme = st.sidebar.radio("Theme Mode", ["Dark", "Light"], horizontal=True, index=0)
+
 # Define Colors based on Theme
 if theme == "Dark":
     main_bg = "#0e1117"
@@ -38,13 +45,16 @@ if theme == "Dark":
     text_color = "#ffffff"
     sub_text = "#cbd5e1"
     border_color = "#334155"
+    pending_color = "#f59e0b" # Amber for pending
 else:
     main_bg = "#f1f5f9"
     card_bg = "#ffffff"
     text_color = "#0f172a"
     sub_text = "#64748b"
     border_color = "#e2e8f0"
-# ───────────────────── CUSTOM CSS (MODERN LOOK) ─────────────────────
+    pending_color = "#d97706"
+
+# ───────────────────── CUSTOM CSS ─────────────────────
 st.markdown(f"""
 <style>
     /* Global Background */
@@ -72,6 +82,22 @@ st.markdown(f"""
     .kpi-box:hover {{
         transform: translateY(-3px);
         box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+    }}
+    
+    /* Pending Card Style */
+    .pending-card {{
+        background-color: {card_bg};
+        border: 1px solid {pending_color};
+        border-radius: 10px;
+        padding: 15px;
+        text-align: center;
+        margin-bottom: 10px;
+    }}
+    .pending-value {{
+        color: {pending_color};
+        font-size: 28px;
+        font-weight: 800;
+        margin: 0;
     }}
    
     /* KPI Text Styling */
@@ -110,6 +136,7 @@ st.markdown(f"""
     }}
 </style>
 """, unsafe_allow_html=True)
+
 # ───────────────────── DATA LOADING ─────────────────────
 @st.cache_data(ttl=60)
 def load_data():
@@ -122,24 +149,29 @@ def load_data():
     for col in date_cols:
         df[col] = pd.to_datetime(df[col], errors='coerce')
     return df
+
 try:
     df = load_data()
     st.sidebar.success(f"✅ Data Synced\n{len(df):,} hops loaded")
 except Exception as e:
     st.error("Could not connect to Google Sheet.")
     st.stop()
+
 # ───────────────────── FILTERS ─────────────────────
 st.sidebar.markdown("### 🔍 Filters")
 date_columns = [col for col in df.columns if "Date" in col or "DATE" in col]
 valid_dates = pd.to_datetime(df[date_columns].stack().dropna(), errors='coerce')
 min_date = valid_dates.min().date() if not valid_dates.empty else datetime.now().date()
 max_date = valid_dates.max().date() if not valid_dates.empty else datetime.now().date()
+
 start_date = st.sidebar.date_input("From Date", value=min_date, min_value=min_date, max_value=max_date)
 end_date = st.sidebar.date_input("To Date", value=max_date, min_value=min_date, max_value=max_date)
+
 c1, c2 = st.sidebar.columns(2)
 with c1: selected_circle = st.selectbox("Circle", ["All"] + sorted(df["Circle"].dropna().unique().tolist()))
 with c2: selected_month = st.selectbox("Month", ["All"] + sorted(df["Month"].dropna().unique().tolist()))
 priority = st.sidebar.multiselect("Priority", ["P0", "P1"], default=["P0", "P1"])
+
 # Apply Filters
 filtered = df.copy()
 if date_columns:
@@ -148,9 +180,11 @@ if date_columns:
         dates = pd.to_datetime(filtered[col], errors='coerce')
         mask |= (dates.dt.date >= start_date) & (dates.dt.date <= end_date)
     filtered = filtered[mask]
+
 if selected_circle != "All": filtered = filtered[filtered["Circle"] == selected_circle]
 if selected_month != "All": filtered = filtered[filtered["Month"] == selected_month]
 if priority: filtered = filtered[filtered["Priority(P0/P1)"].isin(priority)]
+
 # Status Logic
 def get_status(r):
     if pd.notna(r.get("PRI OPEN DATE")): return "PRI Open"
@@ -160,6 +194,7 @@ def get_status(r):
     if pd.notna(r.get("HOP MATERIAL DISPATCH DATE")): return "In-Transit"
     return "Planning"
 filtered["Current Status"] = filtered.apply(get_status, axis=1)
+
 # ───────────────────── SUMMARY PAGE ─────────────────────
 if st.session_state.get("show_summary", False):
     st.title("📋 MW DPR Milestone Summary Report")
@@ -200,12 +235,15 @@ if st.session_state.get("show_summary", False):
             st.session_state.show_summary = False
             st.rerun()
     st.stop()
+
 # ───────────────────── MAIN DASHBOARD UI ─────────────────────
 st.markdown("### 📊 MW DPR Milestone Progress")
+
 total_scope = len(filtered) if len(filtered) > 0 else 1
 rfa_i_offered = len(filtered[~filtered["ACTUAL HOP RFAI OFFERED DATE"].isna()])
 pri_count = len(filtered[filtered["RFI Status"].astype(str).str.strip() == "PRI"])
 ccrfai_count = len(filtered[filtered["RFI Status"].astype(str).str.strip() == "CCRFAI"])
+
 kpi_data = [
     ("Scope", len(filtered)), ("LB", len(filtered[~filtered["PLAN ID"].isna()])),
     ("SR", len(filtered[~filtered["HOP SR Date"].isna()])), ("RFAI", rfa_i_offered),
@@ -224,8 +262,10 @@ kpi_data = [
     ("Soft AT Acc", len(filtered[~filtered["SOFT AT ACCEPTANCE DATE"].isna()])),
     ("HOP AT Done", len(filtered[~filtered["HOP AT DATE"].isna()]))
 ]
+
 # RESPONSIVE GRID (5 Columns)
 rows = [kpi_data[i:i+5] for i in range(0, len(kpi_data), 5)]
+
 for row in rows:
     cols = st.columns(5)
     for i, (label, value) in enumerate(row):
@@ -239,12 +279,14 @@ for row in rows:
                 <div class="kpi-pct">{pct}</div>
             </div>
             """, unsafe_allow_html=True)
+
 if st.button("Open Full Summary Report", use_container_width=True, type="primary"):
     st.session_state.show_summary = True
     st.rerun()
+
 st.markdown("---")
+
 # ───────────────────── EXACT ORIGINAL AGING TABS ─────────────────────
-# (Logic restored exactly as requested, but keeping modern UI styling wrapper)
 st.markdown("### ⏳ Aging Analysis")
 tab1, tab2, tab3, tab4 = st.tabs([
     "RFAI → MS1 (Integration)",
@@ -252,16 +294,19 @@ tab1, tab2, tab3, tab4 = st.tabs([
     "RFAI → MS2 (End-to-End)",
     "Aging Summary"
 ])
+
 # Helper function
 def calc_aging(df, date_col):
     if df.empty or date_col not in df.columns:
         return pd.Series([0] * len(df))
     dates = pd.to_datetime(df[date_col], errors='coerce')
     return (pd.Timestamp.now() - dates).dt.days
+
 # Initialize empty for summary
 ms1_pending = pd.DataFrame()
 ms2_pending = pd.DataFrame()
 end_to_end = pd.DataFrame()
+
 with tab1:
     st.markdown("#### RFAI → MS1 (Integration) Aging")
    
@@ -274,13 +319,16 @@ with tab1:
         ms1_pending["RFAI Date"] = pd.to_datetime(ms1_pending["ACTUAL HOP RFAI OFFERED DATE"]).dt.strftime("%d-%b-%Y")
         ms1_pending["Aging Days"] = calc_aging(ms1_pending, "ACTUAL HOP RFAI OFFERED DATE")
         ms1_pending = ms1_pending.copy()
+
     col1, col2, col3 = st.columns(3)
     with col1: st.metric("RFAI Offered", len(rfai_done))
     with col2: st.metric("MS1 Completed", len(ms1_done))
     with col3: st.metric("MS1 Pending", len(ms1_pending))
+    
     col1, col2 = st.columns(2)
     show_comp = col1.button("Show Completed", key="t1c", use_container_width=True)
     show_pend = col2.button("Show Pending", key="t1p", use_container_width=True)
+    
     if show_comp or not show_pend:
         st.markdown("##### Completed MS1")
         if not ms1_done.empty:
@@ -290,6 +338,7 @@ with tab1:
             ms1_done_disp["Processing Days"] = calc_aging(ms1_done, "ACTUAL HOP RFAI OFFERED DATE")
             ms1_done_disp["CIRCLE_REMARK_1"] = ms1_done["CIRCLE_REMARK_1"]
             st.dataframe(ms1_done_disp.sort_values("Processing Days", ascending=False), use_container_width=True, hide_index=True)
+    
     if show_pend or not show_comp:
         st.markdown("##### Pending MS1")
         if not ms1_pending.empty:
@@ -300,6 +349,7 @@ with tab1:
                                f"RFAI_to_MS1_Pending_{datetime.now().strftime('%d%b')}.csv", "text/csv", use_container_width=True, key="d1")
         else:
             st.success("All RFAI hops have completed MS1")
+
 with tab2:
     st.markdown("#### MS1 → MS2 (HOP AT) Aging")
    
@@ -311,13 +361,16 @@ with tab2:
         ms2_pending["MS1 Date"] = pd.to_datetime(ms2_pending["INTEGRATION DATE"]).dt.strftime("%d-%b-%Y")
         ms2_pending["Aging Days"] = calc_aging(ms2_pending, "INTEGRATION DATE")
         ms2_pending = ms2_pending.copy()
+    
     col1, col2, col3 = st.columns(3)
     with col1: st.metric("MS1 Done", len(ms1_done))
     with col2: st.metric("MS2 Done", len(ms2_done))
     with col3: st.metric("MS2 Pending", len(ms2_pending))
+    
     col1, col2 = st.columns(2)
     show_comp = col1.button("Show Completed", key="t2c", use_container_width=True)
     show_pend = col2.button("Show Pending", key="t2p", use_container_width=True)
+    
     if show_comp or not show_pend:
         st.markdown("##### Completed MS2")
         if not ms2_done.empty:
@@ -327,6 +380,7 @@ with tab2:
             ms2_done_disp["Processing Days"] = calc_aging(ms2_done, "INTEGRATION DATE")
             ms2_done_disp["CIRCLE_REMARK_1"] = ms2_done["CIRCLE_REMARK_1"]
             st.dataframe(ms2_done_disp.sort_values("Processing Days", ascending=False), use_container_width=True, hide_index=True)
+    
     if show_pend or not show_comp:
         st.markdown("##### Pending MS2")
         if not ms2_pending.empty:
@@ -337,6 +391,7 @@ with tab2:
                                f"MS1_to_MS2_Pending_{datetime.now().strftime('%d%b')}.csv", "text/csv", use_container_width=True, key="d2")
         else:
             st.success("All MS1 hops have completed HOP AT")
+
 with tab3:
     st.markdown("#### RFAI → MS2 (End-to-End) Aging")
    
@@ -345,13 +400,16 @@ with tab3:
     if not end_to_end.empty:
         end_to_end["RFAI Date"] = pd.to_datetime(end_to_end["ACTUAL HOP RFAI OFFERED DATE"]).dt.strftime("%d-%b-%Y")
         end_to_end["Total Aging"] = calc_aging(end_to_end, "ACTUAL HOP RFAI OFFERED DATE")
+    
     col1, col2, col3 = st.columns(3)
     with col1: st.metric("RFAI Offered", len(filtered[~filtered["ACTUAL HOP RFAI OFFERED DATE"].isna()]))
     with col2: st.metric("HOP AT Done", len(filtered[~filtered["HOP AT DATE"].isna()]))
     with col3: st.metric("Pending", len(end_to_end))
+    
     col1, col2 = st.columns(2)
     show_comp = col1.button("Show Completed", key="t3c", use_container_width=True)
     show_pend = col2.button("Show Pending", key="t3p", use_container_width=True)
+    
     if show_comp or not show_pend:
         completed = filtered[(~filtered["ACTUAL HOP RFAI OFFERED DATE"].isna()) & (~filtered["HOP AT DATE"].isna())]
         if not completed.empty:
@@ -361,6 +419,7 @@ with tab3:
             comp_disp["Total Days"] = calc_aging(completed, "ACTUAL HOP RFAI OFFERED DATE")
             comp_disp["CIRCLE_REMARK_1"] = completed["CIRCLE_REMARK_1"]
             st.dataframe(comp_disp.sort_values("Total Days", ascending=False), use_container_width=True, hide_index=True)
+    
     if show_pend or not show_comp:
         if not end_to_end.empty:
             pend_disp = end_to_end[["Circle", "HOP A-B", "SITE ID A", "SITE ID B", "RFAI Date", "Total Aging", "CIRCLE_REMARK_1"]]
@@ -370,6 +429,7 @@ with tab3:
                                f"RFAI_to_HOPAT_Pending_{datetime.now().strftime('%d%b')}.csv", "text/csv", use_container_width=True, key="d3")
         else:
             st.success("All RFAI hops have completed HOP AT")
+
 with tab4:
     st.markdown("#### Aging Summary Report")
    
@@ -391,6 +451,7 @@ with tab4:
     st.dataframe(pd.DataFrame(summary), use_container_width=True, hide_index=True)
     st.download_button("Download Summary", pd.DataFrame(summary).to_csv(index=False).encode(),
                        f"APTG_MW_Aging_Summary_{datetime.now().strftime('%d%b%Y')}.csv", "text/csv", use_container_width=True)
+
 # ───────────────────── FULL SEARCHABLE DATA ─────────────────────
 st.markdown("---")
 st.markdown("### 🔎 Full Hop Data")
@@ -416,9 +477,11 @@ if selected_cols:
         f"APTG_Data.csv", "text/csv",
         use_container_width=True,
         type="primary"
+    )
+
 # ───────────────────── PENDING HOPS TRACKER ─────────────────────
 st.markdown("---")
-st.markdown("### Pending Hops Tracker")
+st.markdown("### 🚦 Pending Hops Tracker")
 
 rfai_offered = filtered[~filtered["ACTUAL HOP RFAI OFFERED DATE"].isna()]
 mo_done = filtered[~filtered["HOP MO DATE"].isna()]
@@ -446,19 +509,24 @@ for i, (title, count, df_pend) in enumerate(pendings):
         st.markdown(f"""
         <div class="pending-card">
             <h2 class="pending-value">{count}</h2>
-            <h5 style="margin:8px 0 0; color:#e0e0e0; font-weight:600">{title}</h5>
+            <h5 style="margin:8px 0 0; color:{sub_text}; font-weight:600; font-size:11px;">{title}</h5>
         </div>
         """, unsafe_allow_html=True)
 
 # View pending details
-if st.button("View RFAI Pending") and len(pending_rfai) > 0:
-    st.dataframe(pending_rfai[["Circle", "HOP A-B", "SITE ID A", "SITE ID B", "CIRCLE_REMARK_1"]])
-    st.download_button("Download RFAI Pending", pending_rfai.to_csv(index=False).encode(), "RFAI_Pending.csv")
+c_b1, c_b2 = st.columns(2)
+with c_b1:
+    if st.button("View RFAI Pending Details", use_container_width=True) and len(pending_rfai) > 0:
+        st.dataframe(pending_rfai[["Circle", "HOP A-B", "SITE ID A", "SITE ID B", "CIRCLE_REMARK_1"]])
+        st.download_button("Download RFAI Pending CSV", pending_rfai.to_csv(index=False).encode(), "RFAI_Pending.csv", use_container_width=True)
 
-if st.button("View MO Pending") and len(pending_mo) > 0:
-    st.dataframe(pending_mo[["Circle", "HOP A-B", "SITE ID A", "SITE ID B", "CIRCLE_REMARK_1"]])
-    st.download_button("Download MO Pending", pending_mo.to_csv(index=False).encode(), "MO_Pending.csv")
+with c_b2:
+    if st.button("View MO Pending Details", use_container_width=True) and len(pending_mo) > 0:
+        st.dataframe(pending_mo[["Circle", "HOP A-B", "SITE ID A", "SITE ID B", "CIRCLE_REMARK_1"]])
+        st.download_button("Download MO Pending CSV", pending_mo.to_csv(index=False).encode(), "MO_Pending.csv", use_container_width=True)
+
 # ───────────────────── CHARTS ─────────────────────
+st.markdown("---")
 col1, col2 = st.columns(2)
 with col1:
     fig = px.pie(filtered["Current Status"].value_counts().reset_index(), names="Current Status", values="count",
@@ -467,6 +535,7 @@ with col1:
 with col2:
     fig2 = px.bar(filtered["Circle"].value_counts().reset_index(), x="Circle", y="count", title="Hops by Circle")
     st.plotly_chart(fig2, use_container_width=True)
+
 # ───────────────────── FOOTER ─────────────────────
 st.markdown("---")
 st.markdown(f"<p style='text-align:center; color:{sub_text};'>Last refreshed: {datetime.now().strftime('%d %b %Y • %H:%M')}</p>", unsafe_allow_html=True)
