@@ -609,6 +609,81 @@ with col2:
     fig2 = px.bar(filtered["Circle"].value_counts().reset_index(), x="Circle", y="count", title="Hops by Circle")
     st.plotly_chart(fig2, use_container_width=True)
 
+# ───────────────────── WEEKLY & MONTHLY PROGRESS TRACKER (LIVE) ─────────────────────
+st.markdown("---")
+st.markdown("### Weekly & Monthly Progress Tracker (Live from Sheet)")
+
+# Auto-detect weekly rows (contain "Wk-" or dates like 01-11-2025)
+weekly_rows = df[df["CustomMonth"].astype(str).str.contains("Wk-|\\d{2}-\\d{2}-\\d{4}", regex=True, na=False)].copy()
+monthly_rows = df[df["CustomMonth"].astype(str).str.contains("^[A-Z][a-z]+'\\d{2}$", na=False)].copy()
+grand_total_row = df[df["CustomMonth"].astype(str).str.contains("Grand Total", na=False)]
+
+# Define milestones in correct order
+milestones = [
+    "RFAI", "Survey", "LOS Block", "Media", "MO", "Dispatched", "Delivered", "Mos",
+    "PRI", "I&C", "Allign", "Phy AT Offer NGDC", "Phy AT Offer ENOC", "Phy AT Accepted",
+    "Soft AT Offer NGDC", "Soft AT Offer ENOC", "Soft AT Accepted", "NMS Done",
+    "Integration MS1", "MS2"
+]
+
+# Clean and prepare weekly data
+if not weekly_rows.empty:
+    weekly_rows = weekly_rows[["CustomMonth", "Date"] + milestones].fillna(0)
+    weekly_rows[milestones] = weekly_rows[milestones].astype(int)
+    weekly_rows["Week"] = weekly_rows["CustomMonth"].astype(str) + " " + weekly_rows["Date"].astype(str).str.split(" ").str[0]
+
+    # Show Weekly Progress Table
+    st.markdown("#### Weekly Progress (Live)")
+    st.dataframe(
+        weekly_rows[["Week"] + milestones],
+        use_container_width=True,
+        hide_index=True
+    )
+
+    # Weekly Progress Chart
+    weekly_melt = weekly_rows.melt(id_vars="Week", value_vars=milestones, var_name="Milestone", value_name="Count")
+    fig_weekly = px.bar(weekly_melt, x="Week", y="Count", color="Milestone", title="Weekly Milestone Progress")
+    st.plotly_chart(fig_weekly, use_container_width=True)
+
+# Monthly Progress
+if not monthly_rows.empty:
+    monthly_rows = monthly_rows[["CustomMonth"] + milestones].fillna(0)
+    monthly_rows[milestones] = monthly_rows[milestones].astype(int)
+
+    st.markdown("#### Monthly Progress (Live)")
+    monthly_display = monthly_rows[["CustomMonth"] + milestones]
+    st.dataframe(monthly_display, use_container_width=True, hide_index=True)
+
+    # Monthly Stacked Bar
+    monthly_melt = monthly_rows.melt(id_vars="CustomMonth", value_vars=milestones, var_name="Milestone", value_name="Count")
+    fig_monthly = px.bar(monthly_melt, x="CustomMonth", y="Count", color="Milestone", title="Monthly Milestone Achievement")
+    st.plotly_chart(fig_monthly, use_container_width=True)
+
+# Grand Total Highlight
+if not grand_total_row.empty:
+    st.markdown("#### GRAND TOTAL (All Time)")
+    total_vals = grand_total_row[milestones].fillna(0).astype(int).iloc[0]
+    cols = st.columns(len(total_vals))
+    for i, (milestone, value) in enumerate(total_vals.items()):
+        with cols[i]:
+            st.markdown(f"""
+            <div style="background:#0f172a; padding:20px; border-radius:15px; text-align:center; border:2px solid #00d4ff">
+                <h2 style="color:#00d4ff; margin:0; font-size:42px">{value}</h2>
+                <p style="color:#94a3b8; margin:5px 0 0; font-weight:600">{milestone}</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+# Download All Progress Data
+all_progress = pd.concat([weekly_rows[["Week"] + milestones], monthly_rows[["CustomMonth"] + milestones]], ignore_index=True)
+st.download_button(
+    "Download Full Weekly + Monthly Progress CSV",
+    all_progress.to_csv(index=False).encode(),
+    f"APTG_Weekly_Monthly_Progress_{datetime.now().strftime('%d%b%Y')}.csv",
+    "text/csv",
+    use_container_width=True
+)
+
+st.markdown("---")
 # ───────────────────── FOOTER ─────────────────────
 st.markdown("---")
 st.markdown(f"<p style='text-align:center; color:{sub_text};'>Last refreshed: {datetime.now().strftime('%d %b %Y • %H:%M')}</p>", unsafe_allow_html=True)
