@@ -1,4 +1,4 @@
-# dashboard.py — FINAL COMPLETE VERSION
+# dashboard.py — FINAL VERSION (With Tabbed Pending Tracker)
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -45,7 +45,7 @@ if theme == "Dark":
     text_color = "#ffffff"
     sub_text = "#cbd5e1"
     border_color = "#334155"
-    pending_color = "#f59e0b" # Amber for pending
+    pending_color = "#f59e0b"
 else:
     main_bg = "#f1f5f9"
     card_bg = "#ffffff"
@@ -479,15 +479,15 @@ if selected_cols:
         type="primary"
     )
 
-# ───────────────────── PENDING HOPS TRACKER ─────────────────────
+# ───────────────────── PENDING HOPS TRACKER (TABBED) ─────────────────────
 st.markdown("---")
 st.markdown("### 🚦 Pending Hops Tracker")
 
+# Prepare Datasets
 rfai_offered = filtered[~filtered["ACTUAL HOP RFAI OFFERED DATE"].isna()]
 mo_done = filtered[~filtered["HOP MO DATE"].isna()]
 ic_done = filtered[~filtered["HOP I&C DATE"].isna()]
 ms1_done = filtered[~filtered["INTEGRATION DATE"].isna()]
-ms2_done = filtered[~filtered["HOP AT DATE"].isna()]
 
 pending_rfai = filtered[filtered["ACTUAL HOP RFAI OFFERED DATE"].isna()]
 pending_mo   = rfai_offered[rfai_offered["HOP MO DATE"].isna()]
@@ -495,35 +495,44 @@ pending_ic   = mo_done[mo_done["HOP I&C DATE"].isna()]
 pending_ms1  = rfai_offered[rfai_offered["INTEGRATION DATE"].isna()]
 pending_ms2  = ms1_done[ms1_done["HOP AT DATE"].isna()]
 
-cols = st.columns(5)
-pendings = [
-    ("RFAI PENDING", len(pending_rfai), pending_rfai),
-    ("MO PENDING",   len(pending_mo),   pending_mo),
-    ("I&C PENDING",  len(pending_ic),   pending_ic),
-    ("MS1 PENDING",  len(pending_ms1),  pending_ms1),
-    ("MS2 PENDING",  len(pending_ms2),  pending_ms2)
-]
+# Create Tabs
+pt1, pt2, pt3, pt4, pt5 = st.tabs([
+    "RFAI Pending", "MO Pending", "I&C Pending", "MS1 Pending", "MS2 Pending"
+])
 
-for i, (title, count, df_pend) in enumerate(pendings):
-    with cols[i]:
-        st.markdown(f"""
-        <div class="pending-card">
-            <h2 class="pending-value">{count}</h2>
-            <h5 style="margin:8px 0 0; color:{sub_text}; font-weight:600; font-size:11px;">{title}</h5>
-        </div>
-        """, unsafe_allow_html=True)
+def render_pending_tab(tab, df, stage_name, date_col_prev=None, filename="pending"):
+    with tab:
+        st.markdown(f"#### {stage_name} List")
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            st.metric("Pending Count", len(df))
+        with col2:
+            if not df.empty:
+                cols = ["Circle", "HOP A-B", "SITE ID A", "SITE ID B", "CIRCLE_REMARK_1"]
+                sort_col = "Circle"
+                
+                # If we have a previous date, calculate aging
+                if date_col_prev and date_col_prev in df.columns:
+                    cols.append(date_col_prev)
+                    df = df.copy()
+                    df["Days Pending"] = (pd.Timestamp.now() - pd.to_datetime(df[date_col_prev], errors='coerce')).dt.days
+                    cols.append("Days Pending")
+                    sort_col = "Days Pending"
+                
+                # Display Data
+                st.dataframe(df[cols].sort_values(sort_col, ascending=False), use_container_width=True, hide_index=True)
+                
+                # Download Button
+                st.download_button(f"Download {stage_name} CSV", df[cols].to_csv(index=False).encode(), f"{filename}.csv", "text/csv", use_container_width=True)
+            else:
+                st.success(f"No hops pending for {stage_name}! 🎉")
 
-# View pending details
-c_b1, c_b2 = st.columns(2)
-with c_b1:
-    if st.button("View RFAI Pending Details", use_container_width=True) and len(pending_rfai) > 0:
-        st.dataframe(pending_rfai[["Circle", "HOP A-B", "SITE ID A", "SITE ID B", "CIRCLE_REMARK_1"]])
-        st.download_button("Download RFAI Pending CSV", pending_rfai.to_csv(index=False).encode(), "RFAI_Pending.csv", use_container_width=True)
-
-with c_b2:
-    if st.button("View MO Pending Details", use_container_width=True) and len(pending_mo) > 0:
-        st.dataframe(pending_mo[["Circle", "HOP A-B", "SITE ID A", "SITE ID B", "CIRCLE_REMARK_1"]])
-        st.download_button("Download MO Pending CSV", pending_mo.to_csv(index=False).encode(), "MO_Pending.csv", use_container_width=True)
+# Render all tabs
+render_pending_tab(pt1, pending_rfai, "RFAI Pending", None, "RFAI_Pending")
+render_pending_tab(pt2, pending_mo, "MO Pending", "ACTUAL HOP RFAI OFFERED DATE", "MO_Pending")
+render_pending_tab(pt3, pending_ic, "I&C Pending", "HOP MO DATE", "IC_Pending")
+render_pending_tab(pt4, pending_ms1, "MS1 Pending", "ACTUAL HOP RFAI OFFERED DATE", "MS1_Pending")
+render_pending_tab(pt5, pending_ms2, "MS2 Pending", "INTEGRATION DATE", "MS2_Pending")
 
 # ───────────────────── CHARTS ─────────────────────
 st.markdown("---")
