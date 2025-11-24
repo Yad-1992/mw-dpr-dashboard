@@ -28,7 +28,7 @@ if not check_password():
     st.stop()
 
 # ───────────────────── PAGE SETUP ─────────────────────
-st.set_page_config(page_title="AP-TG MW DPR", page_icon="📡", layout="wide")
+st.set_page_config(page_title="AP-TG MW DPR", page_icon="📈", layout="wide")
 
 # ───────────────────── SIDEBAR ─────────────────────
 st.sidebar.title("MW DPR Dashboard")
