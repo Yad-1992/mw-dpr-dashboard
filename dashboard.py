@@ -609,95 +609,93 @@ with col2:
     fig2 = px.bar(filtered["Circle"].value_counts().reset_index(), x="Circle", y="count", title="Hops by Circle")
     st.plotly_chart(fig2, use_container_width=True)
 
-# ───────────────────── WEEKLY & MONTHLY PROGRESS TRACKER (FINAL — 100% WORKING) ─────────────────────
+# ───────────────────── REAL SUMMARY PIVOT TABLE (LIKE EXCEL) ─────────────────────
 st.markdown("---")
-st.markdown("### Weekly & Monthly Progress Tracker (Live)")
+st.markdown("### Summary Pivot Table – Live from Sheet (Exactly Like Excel)")
 
-# Exact column name from your sheet
-custom_col = "Month"  # ← Confirmed from your sheet
+custom_col = "Month"
 
 if custom_col not in df.columns:
-    st.warning(f"Column '{custom_col}' not found in sheet.")
+    st.error("Column 'CustomMonth' not found!")
+    st.stop()
+
+# Extract only summary rows
+summary_rows = df[df[custom_col].astype(str).str.contains(
+    "Wk-|\\d{2}-\\d{2}-\\d{4}|^[A-Z][a-z]+'\\d{2}$|Grand Total|Total", 
+    na=False, case=False
+)].copy()
+
+if summary_rows.empty:
+    st.info("No summary data found in 'CustomMonth' column.")
 else:
-    # Extract rows
-    weekly_mask = df[custom_col].astype(str).str.contains("Wk-|\\d{2}-\\d{2}-\\d{4}|\\d{2}-[A-Za-z]{3}-\\d{4}", na=False)
-    monthly_mask = df[custom_col].astype(str).str.contains("^[A-Z][a-z]+'\\d{2}$", na=False)
-    total_mask = df[custom_col].astype(str).str.contains("Grand Total|Total", case=False, na=False)
+    # Your exact milestone columns
+    milestones = [
+        "RFAI", "Survey", "LOS Block", "Media", "MO", "Dispatched", "Delivered", "Mos",
+        "PRI", "I&C", "Allign", "Phy AT Offer NGDC", "Phy AT Offer ENOC", "Phy AT Accepted",
+        "Soft AT Offer NGDC", "Soft AT Offer ENOC", "Soft AT Accepted", "NMS Done",
+        "Integration MS1", "MS2"
+    ]
+    
+    # Keep only existing columns
+    cols_to_use = [custom_col] + [c for c in milestones if c in summary_rows.columns]
+    pivot_data = summary_rows[cols_to_use].fillna(0)
+    
+    # Convert to integers
+    for col in cols_to_use[1:]:
+        pivot_data[col] = pd.to_numeric(pivot_data[col], errors='coerce').fillna(0).astype(int)
 
-    weekly_rows = df[weekly_mask].copy() if weekly_mask.any() else pd.DataFrame()
-    monthly_rows = df[monthly_mask].copy() if monthly_mask.any() else pd.DataFrame()
-    grand_total = df[total_mask].copy() if total_mask.any() else pd.DataFrame()
+    # Clean Period names (exactly like your sheet)
+    pivot_data["Period"] = pivot_data[custom_col].astype(str)
+    pivot_data["Period"] = pivot_data["Period"].replace({
+        "Apr'25": "April 2025", "May'25": "May 2025", "Jun'25": "June 2025",
+        "Jul'25": "July 2025", "Aug'25": "August 2025", "Sep'25": "September 2025",
+        "Oct'25": "October 2025", "Nov'25": "November 2025"
+    })
+    pivot_data.loc[pivot_data["Period"].str.contains("Wk-", na=False), "Period"] = "Week: " + pivot_data["Period"]
+    pivot_data.loc[pivot_data["Period"].str.contains("Grand Total|Total", case=False, na=False), "Period"] = "GRAND TOTAL"
 
-    # Milestone columns (only use ones that exist)
-    milestone_cols = ["RFAI", "Survey", "LOS Block", "Media", "MO", "Dispatched", "Delivered", "Mos",
-                      "PRI", "I&C", "Allign", "Phy AT Offer NGDC", "Phy AT Offer ENOC", "Phy AT Accepted",
-                      "Soft AT Offer NGDC", "Soft AT Offer ENOC", "Soft AT Accepted", "NMS Done",
-                      "Integration MS1", "MS2"]
-    available = [col for col in milestone_cols if col in df.columns]
+    # FINAL PIVOT TABLE — EXACTLY LIKE EXCEL
+    final_pivot = pivot_data[["Period"] + cols_to_use[1:]].set_index("Period")
 
-    # WEEKLY PROGRESS
-    if not weekly_rows.empty and "Date" in weekly_rows.columns:
-        weekly_rows = weekly_rows[[custom_col, "Date"] + available].fillna(0)
-        for col in available:
-            weekly_rows[col] = pd.to_numeric(weekly_rows[col], errors='coerce').fillna(0).astype(int)
+    st.markdown("#### Full Summary Pivot Table (Live)")
+    st.dataframe(
+        final_pivot,
+        use_container_width=True,
+        height=600
+    )
 
-        # Create Period column safely
-        weekly_rows["Period"] = weekly_rows[custom_col].astype(str) + " " + weekly_rows["Date"].astype(str).str.split().str[0]
+    # Add totals row (just like Excel)
+    totals = final_pivot.sum(numeric_only=True)
+    totals.name = "TOTAL"
+    final_with_total = pd.concat([final_pivot, pd.DataFrame([totals])])
 
-        st.markdown("#### Weekly Progress")
-        st.dataframe(weekly_rows[["Period"] + available], use_container_width=True, hide_index=True)
+    # Beautiful stacked chart
+    chart_data = final_with_total.reset_index().melt(id_vars="Period", var_name="Milestone", value_name="Count")
+    fig = px.bar(
+        chart_data,
+        x="Period",
+        y="Count",
+        color="Milestone",
+        title="Summary Pivot Chart – Live Achievement",
+        text="Count",
+        height=700
+    )
+    fig.update_traces(textposition='inside')
+    fig.update_layout(barmode='stack', legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+    st.plotly_chart(fig, use_container_width=True)
 
-        weekly_melt = weekly_rows.melt(id_vars="Period", value_vars=available, var_name="Milestone", value_name="Count")
-        fig_w = px.bar(weekly_melt, x="Period", y="Count", color="Milestone", title="Weekly Achievement")
-        st.plotly_chart(fig_w, use_container_width=True)
+    # DOWNLOAD EXACT PIVOT TABLE
+    csv = final_with_total.reset_index().to_csv(index=False).encode()
+    st.download_button(
+        label="Download Summary Pivot Table (Excel Ready)",
+        data=csv,
+        file_name=f"APTG_MW_Summary_Pivot_{datetime.now().strftime('%d%b%Y_%H%M')}.csv",
+        mime="text/csv",
+        use_container_width=True,
+        type="primary"
+    )
 
-    # MONTHLY PROGRESS
-    if not monthly_rows.empty:
-        monthly_rows = monthly_rows[[custom_col] + available].fillna(0)
-        for col in available:
-            monthly_rows[col] = pd.to_numeric(monthly_rows[col], errors='coerce').fillna(0).astype(int)
-
-        st.markdown("#### Monthly Progress")
-        st.dataframe(monthly_rows, use_container_width=True, hide_index=True)
-
-        monthly_melt = monthly_rows.melt(id_vars=custom_col, value_vars=available, var_name="Milestone", value_name="Count")
-        fig_m = px.bar(monthly_melt, x=custom_col, y="Count", color="Milestone", title="Monthly Achievement")
-        st.plotly_chart(fig_m, use_container_width=True)
-
-    # GRAND TOTAL
-    if not grand_total.empty:
-        st.markdown("#### GRAND TOTAL")
-        total_vals = grand_total[available].fillna(0).iloc[0].astype(int)
-        cols = st.columns(len(total_vals))
-        for i, (milestone, value) in enumerate(total_vals.items()):
-            with cols[i]:
-                st.markdown(f"""
-                <div style="background:#0f172a;padding:20px;border-radius:15px;text-align:center;border:3px solid #00d4ff">
-                    <h2 style="color:#00d4ff;margin:0;font-size:42px">{value}</h2>
-                    <p style="color:#94a3b8;margin:5px 0 0;font-weight:600">{milestone}</p>
-                </div>
-                """, unsafe_allow_html=True)
-
-    # DOWNLOAD (Safe & Fixed)
-    download_df = pd.DataFrame()
-    if not weekly_rows.empty and "Period" in weekly_rows.columns:
-        weekly_download = weekly_rows[["Period"] + available].copy()
-        weekly_download.rename(columns={"Period": "Period"}, inplace=True)
-        download_df = pd.concat([download_df, weekly_download])
-
-    if not monthly_rows.empty:
-        monthly_download = monthly_rows[[custom_col] + available].copy()
-        monthly_download.rename(columns={custom_col: "Period"}, inplace=True)
-        download_df = pd.concat([download_df, monthly_download])
-
-    if not download_df.empty:
-        st.download_button(
-            "Download Full Weekly + Monthly Progress",
-            download_df.to_csv(index=False).encode(),
-            f"APTG_Progress_{datetime.now().strftime('%d%b%Y')}.csv",
-            "text/csv",
-            use_container_width=True
-        )
+    st.success("This is your REAL Summary Pivot Table — 100% live from Google Sheet!")
 
 st.markdown("---")
 # ───────────────────── FOOTER ─────────────────────
