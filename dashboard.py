@@ -1,4 +1,5 @@
-# dashboard.py — UI UPGRADE (Logic Unchanged)
+# dashboard.py — FINAL MERGED VERSION (Modern UI + Original Aging Logic)
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -7,7 +8,7 @@ from datetime import datetime
 # ───────────────────── PASSWORD PROTECTION ─────────────────────
 def check_password():
     def password_entered():
-        if st.session_state["password"] == "APTGMW2025":   # PASSWORD
+        if st.session_state["password"] == "APTGMW2025":   # ← CHANGE PASSWORD HERE
             st.session_state["password_correct"] = True
             del st.session_state["password"]
         else:
@@ -35,7 +36,7 @@ st.sidebar.title("MW DPR Dashboard")
 st.sidebar.markdown("**Live • Auto-refresh • Zero Maintenance**")
 st.sidebar.image("https://companieslogo.com/img/orig/NOK_BIG-8604230c.png?t=1720244493", use_container_width=True)
 
-# Theme Selector (Controls colors to fix visibility issues)
+# Theme Selector (Fixes Visibility Issues)
 theme = st.sidebar.radio("Theme Mode", ["Dark", "Light"], horizontal=True, index=0)
 
 # Define Colors based on Theme
@@ -52,7 +53,7 @@ else:
     sub_text = "#64748b"
     border_color = "#e2e8f0"
 
-# ───────────────────── CUSTOM CSS (MODERN & RESPONSIVE) ─────────────────────
+# ───────────────────── CUSTOM CSS (MODERN LOOK) ─────────────────────
 st.markdown(f"""
 <style>
     /* Global Background */
@@ -108,7 +109,7 @@ st.markdown(f"""
         color: {text_color};
     }}
 
-    /* Custom Scrollbar for dataframe */
+    /* Custom Scrollbar */
     ::-webkit-scrollbar {{
         width: 8px;
         height: 8px;
@@ -120,7 +121,7 @@ st.markdown(f"""
 </style>
 """, unsafe_allow_html=True)
 
-# ───────────────────── DATA LOADING (ORIGINAL LOGIC) ─────────────────────
+# ───────────────────── DATA LOADING ─────────────────────
 @st.cache_data(ttl=60)
 def load_data():
     sheet_id = "1BD-Bww-k_3jVwJAGqBbs02YcOoUyNrOWcY_T9xvnbgY"
@@ -178,12 +179,11 @@ def get_status(r):
     return "Planning"
 filtered["Current Status"] = filtered.apply(get_status, axis=1)
 
-# ───────────────────── SUMMARY PAGE LOGIC ─────────────────────
+# ───────────────────── SUMMARY PAGE ─────────────────────
 if st.session_state.get("show_summary", False):
     st.title("📋 MW DPR Milestone Summary Report")
     st.markdown(f"**Generated:** {datetime.now().strftime('%d %b %Y • %H:%M')}")
     
-    # (Same Logic as original)
     total_scope = len(filtered) if len(filtered) > 0 else 1
     rfa_i_offered = len(filtered[~filtered["ACTUAL HOP RFAI OFFERED DATE"].isna()])
     pri_count = len(filtered[filtered["RFI Status"].astype(str).str.strip() == "PRI"])
@@ -223,7 +223,6 @@ if st.session_state.get("show_summary", False):
 # ───────────────────── MAIN DASHBOARD UI ─────────────────────
 st.markdown("### 📊 MW DPR Milestone Progress")
 
-# Calculate KPIs
 total_scope = len(filtered) if len(filtered) > 0 else 1
 rfa_i_offered = len(filtered[~filtered["ACTUAL HOP RFAI OFFERED DATE"].isna()])
 pri_count = len(filtered[filtered["RFI Status"].astype(str).str.strip() == "PRI"])
@@ -248,21 +247,15 @@ kpi_data = [
     ("HOP AT Done", len(filtered[~filtered["HOP AT DATE"].isna()]))
 ]
 
-# ───────────────────── RESPONSIVE KPI GRID (5 Columns) ─────────────────────
-# We split the 20 KPIs into rows of 5 to make them readable on all screens
+# RESPONSIVE GRID (5 Columns)
 rows = [kpi_data[i:i+5] for i in range(0, len(kpi_data), 5)]
 
 for row in rows:
-    cols = st.columns(5) # 5 Columns creates better spacing than 7
+    cols = st.columns(5)
     for i, (label, value) in enumerate(row):
         with cols[i]:
             pct = f"{value/total_scope*100:.1f}%" if total_scope > 0 else "0.0%"
-            
-            # Dynamic Colors for Special Cards
-            if label in ["PRI", "CCRFAI"]:
-                accent = "#ef4444" # Red
-            else:
-                accent = "#00d4ff" # Blue/Cyan
+            accent = "#ef4444" if label in ["PRI", "CCRFAI"] else "#00d4ff"
 
             st.markdown(f"""
             <div class="kpi-box" style="border-left: 4px solid {accent};">
@@ -278,8 +271,17 @@ if st.button("Open Full Summary Report", use_container_width=True, type="primary
 
 st.markdown("---")
 
-# ───────────────────── AGING TABS (LOGIC SAME AS ORIGINAL) ─────────────────────
+# ───────────────────── EXACT ORIGINAL AGING TABS ─────────────────────
+# (Logic restored exactly as requested, but keeping modern UI styling wrapper)
+
 st.markdown("### ⏳ Aging Analysis")
+
+tab1, tab2, tab3, tab4 = st.tabs([
+    "RFAI → MS1 (Integration)", 
+    "MS1 → MS2 (HOP AT)", 
+    "RFAI → MS2 (End-to-End)", 
+    "Aging Summary"
+])
 
 # Helper function
 def calc_aging(df, date_col):
@@ -288,63 +290,155 @@ def calc_aging(df, date_col):
     dates = pd.to_datetime(df[date_col], errors='coerce')
     return (pd.Timestamp.now() - dates).dt.days
 
-tab1, tab2, tab3, tab4 = st.tabs([
-    "RFAI → MS1", "MS1 → MS2", "RFAI → MS2", "Summary"
-])
-
-# Initialize empty
+# Initialize empty for summary
 ms1_pending = pd.DataFrame()
 ms2_pending = pd.DataFrame()
 end_to_end = pd.DataFrame()
 
 with tab1:
+    st.markdown("#### RFAI → MS1 (Integration) Aging")
+    
     rfai_done = filtered[~filtered["ACTUAL HOP RFAI OFFERED DATE"].isna()].copy()
     ms1_done = rfai_done[~rfai_done["INTEGRATION DATE"].isna()].copy()
     ms1_pending = rfai_done[rfai_done["INTEGRATION DATE"].isna()].copy()
     
+    # Add aging only to pending
     if not ms1_pending.empty:
+        ms1_pending["RFAI Date"] = pd.to_datetime(ms1_pending["ACTUAL HOP RFAI OFFERED DATE"]).dt.strftime("%d-%b-%Y")
         ms1_pending["Aging Days"] = calc_aging(ms1_pending, "ACTUAL HOP RFAI OFFERED DATE")
+        ms1_pending = ms1_pending.copy()
 
-    c1,c2,c3 = st.columns(3)
-    c1.metric("RFAI Offered", len(rfai_done))
-    c2.metric("MS1 Done", len(ms1_done))
-    c3.metric("MS1 Pending", len(ms1_pending), delta_color="inverse")
-    
-    if not ms1_pending.empty:
-        st.dataframe(ms1_pending[["Circle","HOP A-B","SITE ID A","ACTUAL HOP RFAI OFFERED DATE","Aging Days"]].sort_values("Aging Days", ascending=False), use_container_width=True, hide_index=True)
+    col1, col2, col3 = st.columns(3)
+    with col1: st.metric("RFAI Offered", len(rfai_done))
+    with col2: st.metric("MS1 Completed", len(ms1_done))
+    with col3: st.metric("MS1 Pending", len(ms1_pending))
+
+    col1, col2 = st.columns(2)
+    show_comp = col1.button("Show Completed", key="t1c", use_container_width=True)
+    show_pend = col2.button("Show Pending", key="t1p", use_container_width=True)
+
+    if show_comp or not show_pend:
+        st.markdown("##### Completed MS1")
+        if not ms1_done.empty:
+            ms1_done_disp = ms1_done[["Circle", "HOP A-B", "SITE ID A", "SITE ID B"]].copy()
+            ms1_done_disp["RFAI Date"] = pd.to_datetime(ms1_done["ACTUAL HOP RFAI OFFERED DATE"]).dt.strftime("%d-%b-%Y")
+            ms1_done_disp["MS1 Date"] = pd.to_datetime(ms1_done["INTEGRATION DATE"]).dt.strftime("%d-%b-%Y")
+            ms1_done_disp["Processing Days"] = calc_aging(ms1_done, "ACTUAL HOP RFAI OFFERED DATE")
+            ms1_done_disp["CIRCLE_REMARK_1"] = ms1_done["CIRCLE_REMARK_1"]
+            st.dataframe(ms1_done_disp.sort_values("Processing Days", ascending=False), use_container_width=True, hide_index=True)
+
+    if show_pend or not show_comp:
+        st.markdown("##### Pending MS1")
+        if not ms1_pending.empty:
+            pending_disp = ms1_pending[["Circle", "HOP A-B", "SITE ID A", "SITE ID B", "RFAI Date", "Aging Days", "CIRCLE_REMARK_1"]]
+            st.dataframe(pending_disp.sort_values("Aging Days", ascending=False), use_container_width=True, hide_index=True)
+            st.bar_chart(pending_disp["Aging Days"].value_counts().sort_index())
+            st.download_button("Download Pending List", pending_disp.to_csv(index=False).encode(),
+                               f"RFAI_to_MS1_Pending_{datetime.now().strftime('%d%b')}.csv", "text/csv", use_container_width=True, key="d1")
+        else:
+            st.success("All RFAI hops have completed MS1")
 
 with tab2:
+    st.markdown("#### MS1 → MS2 (HOP AT) Aging")
+    
     ms1_done = filtered[~filtered["INTEGRATION DATE"].isna()].copy()
+    ms2_done = ms1_done[~ms1_done["HOP AT DATE"].isna()].copy()
     ms2_pending = ms1_done[ms1_done["HOP AT DATE"].isna()].copy()
     
     if not ms2_pending.empty:
+        ms2_pending["MS1 Date"] = pd.to_datetime(ms2_pending["INTEGRATION DATE"]).dt.strftime("%d-%b-%Y")
         ms2_pending["Aging Days"] = calc_aging(ms2_pending, "INTEGRATION DATE")
-    
-    c1,c2 = st.columns(2)
-    c1.metric("MS1 Completed", len(ms1_done))
-    c2.metric("MS2 Pending", len(ms2_pending))
-    
-    if not ms2_pending.empty:
-         st.dataframe(ms2_pending[["Circle","HOP A-B","INTEGRATION DATE","Aging Days"]].sort_values("Aging Days", ascending=False), use_container_width=True, hide_index=True)
+        ms2_pending = ms2_pending.copy()
+
+    col1, col2, col3 = st.columns(3)
+    with col1: st.metric("MS1 Done", len(ms1_done))
+    with col2: st.metric("MS2 Done", len(ms2_done))
+    with col3: st.metric("MS2 Pending", len(ms2_pending))
+
+    col1, col2 = st.columns(2)
+    show_comp = col1.button("Show Completed", key="t2c", use_container_width=True)
+    show_pend = col2.button("Show Pending", key="t2p", use_container_width=True)
+
+    if show_comp or not show_pend:
+        st.markdown("##### Completed MS2")
+        if not ms2_done.empty:
+            ms2_done_disp = ms2_done[["Circle", "HOP A-B", "SITE ID A", "SITE ID B"]].copy()
+            ms2_done_disp["MS1 Date"] = pd.to_datetime(ms2_done["INTEGRATION DATE"]).dt.strftime("%d-%b-%Y")
+            ms2_done_disp["HOP AT Date"] = pd.to_datetime(ms2_done["HOP AT DATE"]).dt.strftime("%d-%b-%Y")
+            ms2_done_disp["Processing Days"] = calc_aging(ms2_done, "INTEGRATION DATE")
+            ms2_done_disp["CIRCLE_REMARK_1"] = ms2_done["CIRCLE_REMARK_1"]
+            st.dataframe(ms2_done_disp.sort_values("Processing Days", ascending=False), use_container_width=True, hide_index=True)
+
+    if show_pend or not show_comp:
+        st.markdown("##### Pending MS2")
+        if not ms2_pending.empty:
+            pending_disp = ms2_pending[["Circle", "HOP A-B", "SITE ID A", "SITE ID B", "MS1 Date", "Aging Days", "CIRCLE_REMARK_1"]]
+            st.dataframe(pending_disp.sort_values("Aging Days", ascending=False), use_container_width=True, hide_index=True)
+            st.bar_chart(pending_disp["Aging Days"].value_counts().sort_index())
+            st.download_button("Download Pending List", pending_disp.to_csv(index=False).encode(),
+                               f"MS1_to_MS2_Pending_{datetime.now().strftime('%d%b')}.csv", "text/csv", use_container_width=True, key="d2")
+        else:
+            st.success("All MS1 hops have completed HOP AT")
 
 with tab3:
+    st.markdown("#### RFAI → MS2 (End-to-End) Aging")
+    
     end_to_end = filtered[(~filtered["ACTUAL HOP RFAI OFFERED DATE"].isna()) & (filtered["HOP AT DATE"].isna())].copy()
+    
     if not end_to_end.empty:
+        end_to_end["RFAI Date"] = pd.to_datetime(end_to_end["ACTUAL HOP RFAI OFFERED DATE"]).dt.strftime("%d-%b-%Y")
         end_to_end["Total Aging"] = calc_aging(end_to_end, "ACTUAL HOP RFAI OFFERED DATE")
-        st.dataframe(end_to_end[["Circle","HOP A-B","ACTUAL HOP RFAI OFFERED DATE","Total Aging"]].sort_values("Total Aging", ascending=False), use_container_width=True, hide_index=True)
+
+    col1, col2, col3 = st.columns(3)
+    with col1: st.metric("RFAI Offered", len(filtered[~filtered["ACTUAL HOP RFAI OFFERED DATE"].isna()]))
+    with col2: st.metric("HOP AT Done", len(filtered[~filtered["HOP AT DATE"].isna()]))
+    with col3: st.metric("Pending", len(end_to_end))
+
+    col1, col2 = st.columns(2)
+    show_comp = col1.button("Show Completed", key="t3c", use_container_width=True)
+    show_pend = col2.button("Show Pending", key="t3p", use_container_width=True)
+
+    if show_comp or not show_pend:
+        completed = filtered[(~filtered["ACTUAL HOP RFAI OFFERED DATE"].isna()) & (~filtered["HOP AT DATE"].isna())]
+        if not completed.empty:
+            comp_disp = completed[["Circle", "HOP A-B", "SITE ID A", "SITE ID B"]].copy()
+            comp_disp["RFAI Date"] = pd.to_datetime(completed["ACTUAL HOP RFAI OFFERED DATE"]).dt.strftime("%d-%b-%Y")
+            comp_disp["HOP AT Date"] = pd.to_datetime(completed["HOP AT DATE"]).dt.strftime("%d-%b-%Y")
+            comp_disp["Total Days"] = calc_aging(completed, "ACTUAL HOP RFAI OFFERED DATE")
+            comp_disp["CIRCLE_REMARK_1"] = completed["CIRCLE_REMARK_1"]
+            st.dataframe(comp_disp.sort_values("Total Days", ascending=False), use_container_width=True, hide_index=True)
+
+    if show_pend or not show_comp:
+        if not end_to_end.empty:
+            pend_disp = end_to_end[["Circle", "HOP A-B", "SITE ID A", "SITE ID B", "RFAI Date", "Total Aging", "CIRCLE_REMARK_1"]]
+            st.dataframe(pend_disp.sort_values("Total Aging", ascending=False), use_container_width=True, hide_index=True)
+            st.bar_chart(pend_disp["Total Aging"].value_counts().sort_index())
+            st.download_button("Download Pending List", pend_disp.to_csv(index=False).encode(),
+                               f"RFAI_to_HOPAT_Pending_{datetime.now().strftime('%d%b')}.csv", "text/csv", use_container_width=True, key="d3")
+        else:
+            st.success("All RFAI hops have completed HOP AT")
 
 with tab4:
-    # Summary of Aging (Same as original)
+    st.markdown("#### Aging Summary Report")
+    
     summary = {
         "Stage": ["RFAI → MS1", "MS1 → MS2", "RFAI → MS2"],
         "Pending": [len(ms1_pending), len(ms2_pending), len(end_to_end)],
         "Max Aging": [
-            int(ms1_pending["Aging Days"].max()) if not ms1_pending.empty else 0,
-            int(ms2_pending["Aging Days"].max()) if not ms2_pending.empty else 0,
-            int(end_to_end["Total Aging"].max()) if not end_to_end.empty else 0
+            int(ms1_pending["Aging Days"].max()) if not ms1_pending.empty and "Aging Days" in ms1_pending.columns else 0,
+            int(ms2_pending["Aging Days"].max()) if not ms2_pending.empty and "Aging Days" in ms2_pending.columns else 0,
+            int(end_to_end["Total Aging"].max()) if not end_to_end.empty and "Total Aging" in end_to_end.columns else 0
+        ],
+        "Avg Aging": [
+            f"{ms1_pending['Aging Days'].mean():.1f}" if not ms1_pending.empty and "Aging Days" in ms1_pending.columns else "0",
+            f"{ms2_pending['Aging Days'].mean():.1f}" if not ms2_pending.empty and "Aging Days" in ms2_pending.columns else "0",
+            f"{end_to_end['Total Aging'].mean():.1f}" if not end_to_end.empty and "Total Aging" in end_to_end.columns else "0"
         ]
     }
+    
     st.dataframe(pd.DataFrame(summary), use_container_width=True, hide_index=True)
+    st.download_button("Download Summary", pd.DataFrame(summary).to_csv(index=False).encode(),
+                       f"APTG_MW_Aging_Summary_{datetime.now().strftime('%d%b%Y')}.csv", "text/csv", use_container_width=True)
 
 # ───────────────────── FULL SEARCHABLE DATA ─────────────────────
 st.markdown("---")
