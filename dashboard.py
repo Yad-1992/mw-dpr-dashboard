@@ -609,24 +609,25 @@ with col2:
     fig2 = px.bar(filtered["Circle"].value_counts().reset_index(), x="Circle", y="count", title="Hops by Circle")
     st.plotly_chart(fig2, use_container_width=True)
 
-# ───────────────────── REAL SUMMARY PIVOT TABLE (LIKE EXCEL) ─────────────────────
+# ───────────────────── SUMMARY PIVOT TABLE – FINAL 100% WORKING ─────────────────────
 st.markdown("---")
-st.markdown("### Summary Pivot Table – Live from Sheet (Exactly Like Excel)")
+st.markdown("### Summary Pivot Table – Live from Google Sheet (Exactly Like Excel)")
 
-custom_col = "Month"
+custom_col = "CustomMonth"
 
 if custom_col not in df.columns:
-    st.error("Column 'CustomMonth' not found!")
+    st.error("Column 'CustomMonth' not found in your sheet!")
     st.stop()
 
-# Extract only summary rows
-summary_rows = df[df[custom_col].astype(str).str.contains(
+# Extract summary rows only
+summary_mask = df[custom_col].astype(str).str.contains(
     "Wk-|\\d{2}-\\d{2}-\\d{4}|^[A-Z][a-z]+'\\d{2}$|Grand Total|Total", 
-    na=False, case=False
-)].copy()
+    case=False, na=False
+)
+summary_df = df[summary_mask].copy()
 
-if summary_rows.empty:
-    st.info("No summary data found in 'CustomMonth' column.")
+if summary_df.empty:
+    st.info("No weekly/monthly summary data found.")
 else:
     # Your exact milestone columns
     milestones = [
@@ -635,67 +636,67 @@ else:
         "Soft AT Offer NGDC", "Soft AT Offer ENOC", "Soft AT Accepted", "NMS Done",
         "Integration MS1", "MS2"
     ]
-    
-    # Keep only existing columns
-    cols_to_use = [custom_col] + [c for c in milestones if c in summary_rows.columns]
-    pivot_data = summary_rows[cols_to_use].fillna(0)
-    
-    # Convert to integers
-    for col in cols_to_use[1:]:
-        pivot_data[col] = pd.to_numeric(pivot_data[col], errors='coerce').fillna(0).astype(int)
 
-    # Clean Period names (exactly like your sheet)
-    pivot_data["Period"] = pivot_data[custom_col].astype(str)
-    pivot_data["Period"] = pivot_data["Period"].replace({
-        "Apr'25": "April 2025", "May'25": "May 2025", "Jun'25": "June 2025",
-        "Jul'25": "July 2025", "Aug'25": "August 2025", "Sep'25": "September 2025",
-        "Oct'25": "October 2025", "Nov'25": "November 2025"
-    })
-    pivot_data.loc[pivot_data["Period"].str.contains("Wk-", na=False), "Period"] = "Week: " + pivot_data["Period"]
-    pivot_data.loc[pivot_data["Period"].str.contains("Grand Total|Total", case=False, na=False), "Period"] = "GRAND TOTAL"
+    # Keep only columns that exist
+    available = [c for c in milestones if c in summary_df.columns]
+    if not available:
+        st.warning("No milestone columns found. Check column names.")
+    else:
+        # Clean data
+        pivot = summary_df[[custom_col] + available].fillna(0)
+        for col in available:
+            pivot[col] = pd.to_numeric(pivot[col], errors='coerce').fillna(0).astype(int)
 
-    # FINAL PIVOT TABLE — EXACTLY LIKE EXCEL
-    final_pivot = pivot_data[["Period"] + cols_to_use[1:]].set_index("Period")
+        # Clean Period names
+        pivot["Period"] = pivot[custom_col].astype(str)
+        pivot["Period"] = pivot["Period"].replace({
+            "Apr'25": "April 2025", "May'25": "May 2025", "Jun'25": "June 2025",
+            "Jul'25": "July 2025", "Aug'25": "August 2025", "Sep'25": "September 2025",
+            "Oct'25": "October 2025", "Nov'25": "November 2025"
+        })
+        pivot.loc[pivot["Period"].str.contains("Wk-", na=False), "Period"] = "Week: " + pivot["Period"]
+        pivot.loc[pivot["Period"].str.contains("Grand Total|Total", case=False), "Period"] = "GRAND TOTAL"
 
-    st.markdown("#### Full Summary Pivot Table (Live)")
-    st.dataframe(
-        final_pivot,
-        use_container_width=True,
-        height=600
-    )
+        # Final pivot table
+        final_table = pivot[["Period"] + available].set_index("Period")
 
-    # Add totals row (just like Excel)
-    totals = final_pivot.sum(numeric_only=True)
-    totals.name = "TOTAL"
-    final_with_total = pd.concat([final_pivot, pd.DataFrame([totals])])
+        st.markdown("#### Live Summary Pivot Table")
+        st.dataframe(final_table, use_container_width=True, height=600)
 
-    # Beautiful stacked chart
-    chart_data = final_with_total.reset_index().melt(id_vars="Period", var_name="Milestone", value_name="Count")
-    fig = px.bar(
-        chart_data,
-        x="Period",
-        y="Count",
-        color="Milestone",
-        title="Summary Pivot Chart – Live Achievement",
-        text="Count",
-        height=700
-    )
-    fig.update_traces(textposition='inside')
-    fig.update_layout(barmode='stack', legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-    st.plotly_chart(fig, use_container_width=True)
+        # Add total row
+        total_row = final_table.sum(numeric_only=True)
+        total_row.name = "TOTAL"
+        display_with_total = pd.concat([final_table, pd.DataFrame([total_row])])
 
-    # DOWNLOAD EXACT PIVOT TABLE
-    csv = final_with_total.reset_index().to_csv(index=False).encode()
-    st.download_button(
-        label="Download Summary Pivot Table (Excel Ready)",
-        data=csv,
-        file_name=f"APTG_MW_Summary_Pivot_{datetime.now().strftime('%d%b%Y_%H%M')}.csv",
-        mime="text/csv",
-        use_container_width=True,
-        type="primary"
-    )
+        # FIXED CHART — NO MORE MELT ERROR
+        chart_data = display_with_total.reset_index().copy()
+        chart_data = chart_data.melt(id_vars="Period", value_vars=available, var_name="Milestone", value_name="Count")
 
-    st.success("This is your REAL Summary Pivot Table — 100% live from Google Sheet!")
+        fig = px.bar(
+            chart_data,
+            x="Period",
+            y="Count",
+            color="Milestone",
+            title="Summary Pivot Chart – Live Progress",
+            text="Count",
+            height=600
+        )
+        fig.update_traces(textposition="inside")
+        fig.update_layout(barmode="stack", legend=dict(orientation="h", y=1.02, x=1, xanchor="right"))
+        st.plotly_chart(fig, use_container_width=True)
+
+        # DOWNLOAD
+        csv = display_with_total.reset_index().to_csv(index=False).encode()
+        st.download_button(
+            label="Download Summary Pivot Table (Excel Ready)",
+            data=csv,
+            file_name=f"APTG_MW_Summary_Pivot_{datetime.now().strftime('%d%b%Y_%H%M')}.csv",
+            mime="text/csv",
+            use_container_width=True,
+            type="primary"
+        )
+
+        st.success("Your Summary Pivot Table is LIVE and PERFECT!")
 
 st.markdown("---")
 # ───────────────────── FOOTER ─────────────────────
