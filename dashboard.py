@@ -1,4 +1,4 @@
-# dashboard.py — FINAL VERSION (With Tabbed Pending Tracker)
+# dashboard.py — FINAL VERSION (Updated Sidebar Filters)
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -157,33 +157,44 @@ except Exception as e:
     st.error("Could not connect to Google Sheet.")
     st.stop()
 
-# ───────────────────── FILTERS ─────────────────────
+# ───────────────────── FILTERS (UPDATED) ─────────────────────
 st.sidebar.markdown("### 🔍 Filters")
-date_columns = [col for col in df.columns if "Date" in col or "DATE" in col]
-valid_dates = pd.to_datetime(df[date_columns].stack().dropna(), errors='coerce')
-min_date = valid_dates.min().date() if not valid_dates.empty else datetime.now().date()
-max_date = valid_dates.max().date() if not valid_dates.empty else datetime.now().date()
 
-start_date = st.sidebar.date_input("From Date", value=min_date, min_value=min_date, max_value=max_date)
-end_date = st.sidebar.date_input("To Date", value=max_date, min_value=min_date, max_value=max_date)
-
+# 1. Standard Filters
 c1, c2 = st.sidebar.columns(2)
 with c1: selected_circle = st.selectbox("Circle", ["All"] + sorted(df["Circle"].dropna().unique().tolist()))
 with c2: selected_month = st.selectbox("Month", ["All"] + sorted(df["Month"].dropna().unique().tolist()))
+
 priority = st.sidebar.multiselect("Priority", ["P0", "P1"], default=["P0", "P1"])
 
-# Apply Filters
-filtered = df.copy()
-if date_columns:
-    mask = pd.Series([False] * len(filtered))
-    for col in date_columns:
-        dates = pd.to_datetime(filtered[col], errors='coerce')
-        mask |= (dates.dt.date >= start_date) & (dates.dt.date <= end_date)
-    filtered = filtered[mask]
+# 2. New Filters: Nominal Aop & Final Remarks
+if "Nominal Aop" in df.columns:
+    nominal_options = sorted(df["Nominal Aop"].dropna().astype(str).unique().tolist())
+    selected_nominal = st.sidebar.multiselect("Nominal Aop", nominal_options)
+else:
+    selected_nominal = []
 
-if selected_circle != "All": filtered = filtered[filtered["Circle"] == selected_circle]
-if selected_month != "All": filtered = filtered[filtered["Month"] == selected_month]
-if priority: filtered = filtered[filtered["Priority(P0/P1)"].isin(priority)]
+if "Final Remarks" in df.columns:
+    # Using astype(str) to handle potential mixed types
+    remarks_options = sorted(df["Final Remarks"].dropna().astype(str).unique().tolist())
+    selected_remarks = st.sidebar.multiselect("Final Remarks", remarks_options)
+else:
+    selected_remarks = []
+
+# 3. Apply Filters
+filtered = df.copy()
+
+if selected_circle != "All": 
+    filtered = filtered[filtered["Circle"] == selected_circle]
+if selected_month != "All": 
+    filtered = filtered[filtered["Month"] == selected_month]
+if priority: 
+    filtered = filtered[filtered["Priority(P0/P1)"].isin(priority)]
+if selected_nominal:
+    filtered = filtered[filtered["Nominal Aop"].astype(str).isin(selected_nominal)]
+if selected_remarks:
+    filtered = filtered[filtered["Final Remarks"].astype(str).isin(selected_remarks)]
+
 
 # Status Logic
 def get_status(r):
@@ -286,7 +297,7 @@ if st.button("Open Full Summary Report", use_container_width=True, type="primary
 
 st.markdown("---")
 
-# ───────────────────── EXACT ORIGINAL AGING TABS ─────────────────────
+# ───────────────────── AGING TABS ─────────────────────
 st.markdown("### Aging Analysis")
 tab1, tab2, tab3, tab4 = st.tabs([
     "RFAI → MS1 (Integration)",
