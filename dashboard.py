@@ -479,61 +479,125 @@ if selected_cols:
         type="primary"
     )
 
-# ───────────────────── PENDING HOPS TRACKER (TABBED) ─────────────────────
+# ───────────────────── PENDING HOPS TRACKER (REVISED DAX LOGIC) ─────────────────────
 st.markdown("---")
-st.markdown("### 🚦 Pending Hops Tracker")
+st.markdown("### 🚦 Pending Hops Tracker (DAX Logic)")
 
-# Prepare Datasets
-rfai_offered = filtered[~filtered["ACTUAL HOP RFAI OFFERED DATE"].isna()]
-mo_done = filtered[~filtered["HOP MO DATE"].isna()]
-ic_done = filtered[~filtered["HOP I&C DATE"].isna()]
-ms1_done = filtered[~filtered["INTEGRATION DATE"].isna()]
+# Helper to calculate aging days safely
+def get_aging(df, start_col):
+    if df.empty or start_col not in df.columns:
+        return 0
+    return (pd.Timestamp.now() - pd.to_datetime(df[start_col], errors='coerce')).dt.days
 
-pending_rfai = filtered[filtered["ACTUAL HOP RFAI OFFERED DATE"].isna()]
-pending_mo   = rfai_offered[rfai_offered["HOP MO DATE"].isna()]
-pending_ic   = mo_done[mo_done["HOP I&C DATE"].isna()]
-pending_ms1  = rfai_offered[rfai_offered["INTEGRATION DATE"].isna()]
-pending_ms2  = ms1_done[ms1_done["HOP AT DATE"].isna()]
+# 1. Survey Pending
+# Logic: RFAI Date + Media Date + (Survey Date is BLANK)
+survey_pend = filtered[
+    (~filtered["ACTUAL HOP RFAI OFFERED DATE"].isna()) & 
+    (~filtered["Media Date"].isna()) & 
+    (filtered["Survey Date"].isna())
+].copy()
 
-# Create Tabs
-pt1, pt2, pt3, pt4, pt5 = st.tabs([
-    "RFAI Pending", "MO Pending", "I&C Pending", "MS1 Pending", "MS2 Pending"
+# 2. MO Pending
+# Logic: Survey Date + (MO Date is BLANK) + (PRI Status is NOT "Pending")
+# Note: Using 'RFI Status' column as proxy for 'PRI Status' based on your sheet
+mo_pend = filtered[
+    (~filtered["Survey Date"].isna()) & 
+    (filtered["HOP MO DATE"].isna()) & 
+    (filtered["RFI Status"].astype(str).str.strip().str.lower() != "pending")
+].copy()
+
+# 3. I&C Pending
+# Logic: Material Delivery Date + (I&C Date is BLANK)
+ic_pend = filtered[
+    (~filtered["HOP MATERIAL DELIVERY DATE"].isna()) & 
+    (filtered["HOP I&C DATE"].isna())
+].copy()
+
+# 4. MS1 Pending
+# Logic: I&C Date + (Alignment Date is BLANK)
+ms1_pend = filtered[
+    (~filtered["HOP I&C DATE"].isna()) & 
+    (filtered["Alignment Date"].isna())
+].copy()
+
+# 5. Phy AT Pending
+# Logic: I&C Date + (Phy AT Acceptance Date is BLANK)
+phy_pend = filtered[
+    (~filtered["HOP I&C DATE"].isna()) & 
+    (filtered["PHY-AT ACCEPTANCE DATE"].isna())
+].copy()
+
+# 6. Soft AT Pending
+# Logic: Alignment Date + (Soft AT Acceptance Date is BLANK)
+soft_pend = filtered[
+    (~filtered["Alignment Date"].isna()) & 
+    (filtered["SOFT AT ACCEPTANCE DATE"].isna())
+].copy()
+
+# ─── TABS LAYOUT ───
+t1, t2, t3, t4, t5, t6 = st.tabs([
+    f"Survey ({len(survey_pend)})", 
+    f"MO ({len(mo_pend)})", 
+    f"I&C ({len(ic_pend)})", 
+    f"MS1 ({len(ms1_pend)})", 
+    f"Phy AT ({len(phy_pend)})", 
+    f"Soft AT ({len(soft_pend)})"
 ])
 
-def render_pending_tab(tab, df, stage_name, date_col_prev=None, filename="pending"):
+# Function to render each tab uniformly
+def render_pending_tab(tab, df, name, aging_base_col):
     with tab:
-        st.markdown(f"#### {stage_name} List")
-        col1, col2 = st.columns([1, 4])
-        with col1:
-            st.metric("Pending Count", len(df))
-        with col2:
-            if not df.empty:
-                cols = ["Circle", "HOP A-B", "SITE ID A", "SITE ID B", "CIRCLE_REMARK_1"]
-                sort_col = "Circle"
-                
-                # If we have a previous date, calculate aging
-                if date_col_prev and date_col_prev in df.columns:
-                    cols.append(date_col_prev)
-                    df = df.copy()
-                    df["Days Pending"] = (pd.Timestamp.now() - pd.to_datetime(df[date_col_prev], errors='coerce')).dt.days
-                    cols.append("Days Pending")
-                    sort_col = "Days Pending"
-                
-                # Display Data
-                st.dataframe(df[cols].sort_values(sort_col, ascending=False), use_container_width=True, hide_index=True)
-                
-                # Download Button
-                st.download_button(f"Download {stage_name} CSV", df[cols].to_csv(index=False).encode(), f"{filename}.csv", "text/csv", use_container_width=True)
-            else:
-                st.success(f"No hops pending for {stage_name}! 🎉")
+        col_head, col_dl = st.columns([3, 1])
+        with col_head:
+            st.markdown(f"#### 📉 {name} Pending List")
+        
+        if not df.empty:
+            # Calculate Aging based on the specific DAX logic prerequisite
+            df["Days Pending"] = get_aging(df, aging_base_col)
+            
+            # Select columns to display
+            base_cols = ["Circle", "HOP A-B", "SITE ID A", "SITE ID B", "CIRCLE_REMARK_1", aging_base_col, "Days Pending"]
+            # Filter only columns that actually exist in the dataframe
+            show_cols = [c for c in base_cols if c in df.columns]
+            
+            # Display Table
+            st.dataframe(
+                df[show_cols].sort_values("Days Pending", ascending=False),
+                use_container_width=True,
+                hide_index=True
+            )
+            
+            # Download Button
+            with col_dl:
+                st.download_button(
+                    label="📥 Download CSV",
+                    data=df[show_cols].to_csv(index=False).encode(),
+                    file_name=f"{name.replace(' ', '_')}_Pending.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+        else:
+            st.success(f"✅ Great job! No hops pending in {name}.")
 
-# Render all tabs
-render_pending_tab(pt1, pending_rfai, "RFAI Pending", None, "RFAI_Pending")
-render_pending_tab(pt2, pending_mo, "MO Pending", "ACTUAL HOP RFAI OFFERED DATE", "MO_Pending")
-render_pending_tab(pt3, pending_ic, "I&C Pending", "HOP MO DATE", "IC_Pending")
-render_pending_tab(pt4, pending_ms1, "MS1 Pending", "ACTUAL HOP RFAI OFFERED DATE", "MS1_Pending")
-render_pending_tab(pt5, pending_ms2, "MS2 Pending", "INTEGRATION DATE", "MS2_Pending")
+# ─── RENDER TABS ───
 
+# 1. Survey Pending -> Aging calculated from RFAI Date
+render_pending_tab(t1, survey_pend, "Survey", "ACTUAL HOP RFAI OFFERED DATE")
+
+# 2. MO Pending -> Aging calculated from Survey Date
+render_pending_tab(t2, mo_pend, "MO", "Survey Date")
+
+# 3. I&C Pending -> Aging calculated from Material Delivery Date
+render_pending_tab(t3, ic_pend, "I&C", "HOP MATERIAL DELIVERY DATE")
+
+# 4. MS1 Pending -> Aging calculated from I&C Date
+render_pending_tab(t4, ms1_pend, "MS1", "HOP I&C DATE")
+
+# 5. Phy AT Pending -> Aging calculated from I&C Date
+render_pending_tab(t5, phy_pend, "Phy AT", "HOP I&C DATE")
+
+# 6. Soft AT Pending -> Aging calculated from Alignment Date
+render_pending_tab(t6, soft_pend, "Soft AT", "Alignment Date")
 # ───────────────────── CHARTS ─────────────────────
 st.markdown("---")
 col1, col2 = st.columns(2)
