@@ -609,47 +609,49 @@ with col2:
     fig2 = px.bar(filtered["Circle"].value_counts().reset_index(), x="Circle", y="count", title="Hops by Circle")
     st.plotly_chart(fig2, use_container_width=True)
 
-# ───────────────────── WEEKLY & MONTHLY PROGRESS TRACKER (WORKS WITH YOUR SHEET) ─────────────────────
+# ───────────────────── WEEKLY & MONTHLY PROGRESS TRACKER (FINAL — 100% WORKING) ─────────────────────
 st.markdown("---")
 st.markdown("### Weekly & Monthly Progress Tracker (Live)")
 
-# Your exact column name in the sheet
-custom_col = "Month"   # ← This is the real name in your Google Sheet
+# Exact column name from your sheet
+custom_col = "CustomMonth"  # ← Confirmed from your sheet
 
 if custom_col not in df.columns:
-    st.warning(f"Column '{custom_col}' not found. Check column name in Google Sheet.")
+    st.warning(f"Column '{custom_col}' not found in sheet.")
 else:
     # Extract rows
-    weekly_rows = df[df[custom_col].astype(str).str.contains("Wk-|\\d{2}-\\d{2}-\\d{4}", na=False)].copy()
-    monthly_rows = df[df[custom_col].astype(str).str.contains("^[A-Z][a-z]+'\\d{2}$", na=False)].copy()
-    grand_total = df[df[custom_col].astype(str).str.contains("Grand Total|Total", case=False, na=False)].copy()
+    weekly_mask = df[custom_col].astype(str).str.contains("Wk-|\\d{2}-\\d{2}-\\d{4}|\\d{2}-[A-Za-z]{3}-\\d{4}", na=False)
+    monthly_mask = df[custom_col].astype(str).str.contains("^[A-Z][a-z]+'\\d{2}$", na=False)
+    total_mask = df[custom_col].astype(str).str.contains("Grand Total|Total", case=False, na=False)
 
-    # Your exact milestone columns from the sheet
-    milestones = [
-        "RFAI", "Survey", "LOS Block", "Media", "MO", "Dispatched", "Delivered", "Mos",
-        "PRI", "I&C", "Allign", "Phy AT Offer NGDC", "Phy AT Offer ENOC", "Phy AT Accepted",
-        "Soft AT Offer NGDC", "Soft AT Offer ENOC", "Soft AT Accepted", "NMS Done",
-        "Integration MS1", "MS2"
-    ]
+    weekly_rows = df[weekly_mask].copy() if weekly_mask.any() else pd.DataFrame()
+    monthly_rows = df[monthly_mask].copy() if monthly_mask.any() else pd.DataFrame()
+    grand_total = df[total_mask].copy() if total_mask.any() else pd.DataFrame()
 
-    # Keep only existing columns
-    available = [col for col in milestones if col in df.columns]
+    # Milestone columns (only use ones that exist)
+    milestone_cols = ["RFAI", "Survey", "LOS Block", "Media", "MO", "Dispatched", "Delivered", "Mos",
+                      "PRI", "I&C", "Allign", "Phy AT Offer NGDC", "Phy AT Offer ENOC", "Phy AT Accepted",
+                      "Soft AT Offer NGDC", "Soft AT Offer ENOC", "Soft AT Accepted", "NMS Done",
+                      "Integration MS1", "MS2"]
+    available = [col for col in milestone_cols if col in df.columns]
 
-    # WEEKLY
-    if not weekly_rows.empty:
+    # WEEKLY PROGRESS
+    if not weekly_rows.empty and "Date" in weekly_rows.columns:
         weekly_rows = weekly_rows[[custom_col, "Date"] + available].fillna(0)
         for col in available:
             weekly_rows[col] = pd.to_numeric(weekly_rows[col], errors='coerce').fillna(0).astype(int)
+
+        # Create Period column safely
         weekly_rows["Period"] = weekly_rows[custom_col].astype(str) + " " + weekly_rows["Date"].astype(str).str.split().str[0]
 
         st.markdown("#### Weekly Progress")
         st.dataframe(weekly_rows[["Period"] + available], use_container_width=True, hide_index=True)
 
-        melt_w = weekly_rows.melt(id_vars="Period", value_vars=available, var_name="Milestone", value_name="Count")
-        fig_w = px.bar(melt_w, x="Period", y="Count", color="Milestone", title="Weekly Achievement")
+        weekly_melt = weekly_rows.melt(id_vars="Period", value_vars=available, var_name="Milestone", value_name="Count")
+        fig_w = px.bar(weekly_melt, x="Period", y="Count", color="Milestone", title="Weekly Achievement")
         st.plotly_chart(fig_w, use_container_width=True)
 
-    # MONTHLY
+    # MONTHLY PROGRESS
     if not monthly_rows.empty:
         monthly_rows = monthly_rows[[custom_col] + available].fillna(0)
         for col in available:
@@ -658,8 +660,8 @@ else:
         st.markdown("#### Monthly Progress")
         st.dataframe(monthly_rows, use_container_width=True, hide_index=True)
 
-        melt_m = monthly_rows.melt(id_vars=custom_col, value_vars=available, var_name="Milestone", value_name="Count")
-        fig_m = px.bar(melt_m, x=custom_col, y="Count", color="Milestone", title="Monthly Achievement")
+        monthly_melt = monthly_rows.melt(id_vars=custom_col, value_vars=available, var_name="Milestone", value_name="Count")
+        fig_m = px.bar(monthly_melt, x=custom_col, y="Count", color="Milestone", title="Monthly Achievement")
         st.plotly_chart(fig_m, use_container_width=True)
 
     # GRAND TOTAL
@@ -676,16 +678,23 @@ else:
                 </div>
                 """, unsafe_allow_html=True)
 
-    # Download button
-    if not weekly_rows.empty or not monthly_rows.empty:
-        combined = pd.concat([
-            weekly_rows[["Period"] + available].rename(columns={"Period": "Period"}),
-            monthly_rows[[custom_col] + available].rename(columns={custom_col: "Period"})
-        ], ignore_index=True)
+    # DOWNLOAD (Safe & Fixed)
+    download_df = pd.DataFrame()
+    if not weekly_rows.empty and "Period" in weekly_rows.columns:
+        weekly_download = weekly_rows[["Period"] + available].copy()
+        weekly_download.rename(columns={"Period": "Period"}, inplace=True)
+        download_df = pd.concat([download_df, weekly_download])
+
+    if not monthly_rows.empty:
+        monthly_download = monthly_rows[[custom_col] + available].copy()
+        monthly_download.rename(columns={custom_col: "Period"}, inplace=True)
+        download_df = pd.concat([download_df, monthly_download])
+
+    if not download_df.empty:
         st.download_button(
-            "Download Full Progress Report",
-            combined.to_csv(index=False).encode(),
-            f"APTG_Weekly_Monthly_Progress_{datetime.now().strftime('%d%b%Y')}.csv",
+            "Download Full Weekly + Monthly Progress",
+            download_df.to_csv(index=False).encode(),
+            f"APTG_Progress_{datetime.now().strftime('%d%b%Y')}.csv",
             "text/csv",
             use_container_width=True
         )
