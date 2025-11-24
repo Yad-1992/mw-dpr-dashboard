@@ -467,8 +467,93 @@ if selected_cols:
         f"APTG_Data.csv", "text/csv",
         use_container_width=True,
         type="primary"
-    )
 
+# ───────────────────── PENDING HOPS DASHBOARD (LIVE) ─────────────────────
+st.markdown("---")
+st.markdown("### Pending Hops Tracker (Live & Auto-Updated)")
+
+# Calculate all pending categories
+rfai_offered = filtered[~filtered["ACTUAL HOP RFAI OFFERED DATE"].isna()]
+mo_done = filtered[~filtered["HOP MO DATE"].isna()]
+ic_done = filtered[~filtered["HOP I&C DATE"].isna()]
+ms1_done = filtered[~filtered["INTEGRATION DATE"].isna()]  # MS1 = Integration
+ms2_done = filtered[~filtered["HOP AT DATE"].isna()]      # MS2 = HOP AT
+
+pending_rfai = filtered[filtered["ACTUAL HOP RFAI OFFERED DATE"].isna()]
+pending_mo   = rfai_offered[rfai_offered["HOP MO DATE"].isna()]
+pending_ic   = mo_done[mo_done["HOP I&C DATE"].isna()]
+pending_ms1  = rfai_offered[rfai_offered["INTEGRATION DATE"].isna()]
+pending_ms2  = ms1_done[ms1_done["HOP AT DATE"].isna()]
+
+# Beautiful Pending Cards
+cols = st.columns(5)
+pending_list = [
+    ("RFAI PENDING", len(pending_rfai), "#ef4444", pending_rfai),
+    ("MO PENDING",   len(pending_mo),   "#f59e0b", pending_mo),
+    ("I&C PENDING",  len(pending_ic),   "#8b5cf6", pending_ic),
+    ("MS1 PENDING",  len(pending_ms1),  "#3b82f6", pending_ms1),
+    ("MS2 PENDING",  len(pending_ms2),  "#dc2626", pending_ms2)
+]
+
+for i, (title, count, color, df_pending) in enumerate(pending_list):
+    with cols[i]:
+        st.markdown(f"""
+        <div style="background:#1e1e1e; padding:20px; border-radius:15px; text-align:center; 
+                    border-left:8px solid {color}; box-shadow:0 6px 20px rgba(0,0,0,0.4); min-height:140px">
+            <h2 style="margin:0; color:{color}; font-size:48px; font-weight:900">{count}</h2>
+            <h5 style="margin:8px 0 0; color:#e0e0e0; font-weight:600">{title}</h5>
+        </div>
+        """, unsafe_allow_html=True)
+
+# Show details when clicked
+st.markdown("#### Click to view details & download list")
+c1, c2, c3, c4, c5 = st.columns(5)
+
+with c1:
+    if st.button(f"RFAI Pending ({len(pending_rfai)})", use_container_width=True, type="secondary"):
+        st.session_state.pending_view = "RFAI"
+with c2:
+    if st.button(f"MO Pending ({len(pending_mo)})", use_container_width=True, type="secondary"):
+        st.session_state.pending_view = "MO"
+with c3:
+    if st.button(f"I&C Pending ({len(pending_ic)})", use_container_width=True, type="secondary"):
+        st.session_state.pending_view = "IC"
+with c4:
+    if st.button(f"MS1 Pending ({len(pending_ms1)})", use_container_width=True, type="secondary"):
+        st.session_state.pending_view = "MS1"
+with c5:
+    if st.button(f"MS2 Pending ({len(pending_ms2)})", use_container_width=True, type="secondary"):
+        st.session_state.pending_view = "MS2"
+
+# Show selected pending list
+if "pending_view" in st.session_state:
+    view = st.session_state.pending_view
+    if view == "RFAI": df_show = pending_rfai
+    elif view == "MO": df_show = pending_mo
+    elif view == "IC": df_show = pending_ic
+    elif view == "MS1": df_show = pending_ms1
+    elif view == "MS2": df_show = pending_ms2
+
+    st.markdown(f"#### {view} PENDING HOPS")
+    display_cols = ["Circle", "HOP A-B", "SITE ID A", "SITE ID B", "Priority(P0/P1)", "CIRCLE_REMARK_1", "Final Remarks"]
+    df_display = df_show[display_cols].copy() if not df_show.empty else pd.DataFrame(columns=display_cols)
+    
+    st.dataframe(df_display, use_container_width=True, height=500)
+    
+    csv = df_display.to_csv(index=False).encode()
+    st.download_button(
+        f"Download {view} Pending List",
+        csv,
+        f"APTG_{view.replace(' ', '_')}_Pending_{datetime.now().strftime('%d%b%Y')}.csv",
+        "text/csv",
+        use_container_width=True
+    )
+    
+    if st.button("Close", use_container_width=True):
+        del st.session_state.pending_view
+        st.rerun()
+
+st.markdown("---")
 # ───────────────────── CHARTS ─────────────────────
 col1, col2 = st.columns(2)
 with col1:
