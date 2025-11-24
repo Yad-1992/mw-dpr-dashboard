@@ -454,7 +454,7 @@ with tab4:
 
 # ───────────────────── FULL SEARCHABLE DATA ─────────────────────
 st.markdown("---")
-st.markdown("### 🔎 Full Hop Data")
+st.markdown("### Full Hop Data")
 default_cols = [
     "Circle", "Month", "HOP A-B", "SITE ID A", "SITE ID B",
     "Priority(P0/P1)", "Current Status", "RFI Status", "CIRCLE_REMARK_1", "Final Remarks"
@@ -481,7 +481,7 @@ if selected_cols:
 
 # ───────────────────── PENDING HOPS TRACKER (REVISED DAX LOGIC) ─────────────────────
 st.markdown("---")
-st.markdown("### 🚦 Pending Hops")
+st.markdown("### Pending Hops")
 
 # Helper to calculate aging days safely
 def get_aging(df, start_col):
