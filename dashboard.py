@@ -1,159 +1,41 @@
 import streamlit as st
-import yaml
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-import streamlit_authenticator as stauth
-from streamlit_authenticator.utilities.hasher import Hasher
-from yaml.loader import SafeLoader
-import os
+import pandas as pd
+import plotly.express as px
+from datetime import datetime
 
-# ───────────────────── CONFIG ─────────────────────
-st.set_page_config(page_title="AP-TG MW DPR", layout="centered")
+# ───────────────────── PAGE SETUP ─────────────────────
+# Must be the very first Streamlit command
+st.set_page_config(page_title="AP-TG MW DPR", page_icon="📈", layout="wide")
 
-# CHANGE THESE
-ADMIN_EMAIL = "nirmalasahoongrh@gmail.com"
-APP_URL = st.secrets.get("APP_URL", "https://your-app-name.streamlit.app")  # Set in secrets
-SMTP_EMAIL = st.secrets["GMAIL"]["sender_email"]
-SMTP_PASS = st.secrets["GMAIL"]["sender_password"]
+# ───────────────────── PASSWORD PROTECTION ─────────────────────
+def check_password():
+    """Returns `True` if the user had the correct password."""
 
-USERS_FILE = "users.yaml"
-PENDING_FILE = "pending_requests.yaml"
-
-# ───────────────────── INIT FILES ─────────────────────
-if not os.path.exists(USERS_FILE):
-    default = {
-        'credentials': {'usernames': {'admin': {'name': 'Admin', 'email': ADMIN_EMAIL, 'password': Hasher(['admin123']).generate()[0]}}},
-        'cookie': {'expiry_days': 30, 'key': 'secure_key_2025', 'name': 'mw_dpr_cookie'}
-    }
-    with open(USERS_FILE, 'w') as f:
-        yaml.dump(default, f)
-
-if not os.path.exists(PENDING_FILE):
-    with open(PENDING_FILE, 'w') as f:
-        yaml.dump([], f)
-
-config = yaml.load(open(USERS_FILE), Loader=SafeLoader)
-pending = yaml.load(open(PENDING_FILE), Loader=SafeLoader) or []
-
-authenticator = stauth.Authenticate(
-    config['credentials'],
-    config['cookie']['name'],
-    config['cookie']['key'],
-    config['cookie']['expiry_days']
-)
-
-# ───────────────────── SEND EMAIL ─────────────────────
-def send_email(to, subject, html):
-    try:
-        msg = MIMEMultipart("alternative")
-        msg['From'] = SMTP_EMAIL
-        msg['To'] = to
-        msg['Subject'] = subject
-        msg.attach(MIMEText(html, "html"))
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()
-        server.login(SMTP_EMAIL, SMTP_PASS)
-        server.send_message(msg)
-        server.quit()
-        return True
-    except:
-        return False
-
-# ───────────────────── ADMIN APPROVAL PANEL ─────────────────────
-if st.query_params.get("admin") == "approve":
-    st.title("Admin Approval Panel")
-    name, status, user = authenticator.login(location="main")
-    
-    if status and user == "admin":
-        action = st.query_params.get("action")
-        target = st.query_params.get("user")
-
-        if action and target:
-            req = next((r for r in pending if r['username'] == target), None)
-            if req:
-                if action == "approve":
-                    hashed = Hasher([req['password']]).generate()[0]
-                    config['credentials']['usernames'][target] = {
-                        'name': req['name'], 'email': req['email'], 'password': hashed
-                    }
-                    with open(USERS_FILE, 'w') as f:
-                        yaml.dump(config, f)
-                    pending = [r for r in pending if r['username'] != target]
-                    with open(PENDING_FILE, 'w') as f:
-                        yaml.dump(pending, f)
-                    send_email(req['email'], "Access Approved!", f"Hi {req['name']},<br><br>Your account is approved!<br>Login here: {APP_URL}")
-                    st.success(f"APPROVED: {target}")
-                elif action == "reject":
-                    pending = [r for r in pending if r['username'] != target]
-                    with open(PENDING_FILE, 'w') as f:
-                        yaml.dump(pending, f)
-                    st.warning(f"REJECTED: {target}")
-            st.rerun()
+    def password_entered():
+        """Checks whether a password entered by the user is correct."""
+        if st.session_state["password"] == "APTGMW2025":  # ← PASSWORD
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # Don't store password
         else:
-            st.info("No action specified.")
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        # First run, show input
+        st.title("AP & TG MW DPR – Secure Access")
+        st.text_input("Enter Password", type="password", on_change=password_entered, key="password")
+        return False
+    elif not st.session_state["password_correct"]:
+        # Password incorrect, show input + error
+        st.text_input("Enter Password", type="password", on_change=password_entered, key="password")
+        st.error("😕 Access Denied. Please try again.")
+        return False
     else:
-        st.error("Admin login required")
+        # Password correct
+        return True
+
+if not check_password():
     st.stop()
 
-# ───────────────────── MAIN LOGIN + SIGNUP ─────────────────────
-name, authentication_status, username = authenticator.login(location="main")
-
-if authentication_status:
-    st.success(f"Welcome {name}!")
-    st.balloons()
-    st.title("Your Dashboard Here")
-    authenticator.logout("Logout", "sidebar")
-
-elif authentication_status is False:
-    st.error("Wrong username/password")
-
-else:
-    tab1, tab2 = st.tabs(["Login", "Request Access"])
-
-    with tab1:
-        st.info("Enter your credentials above")
-
-    with tab2:
-        st.header("Request Access")
-        with st.form("signup"):
-            name_in = st.text_input("Full Name")
-            user_in = st.text_input("Username")
-            email_in = st.text_input("Email")
-            pass_in = st.text_input("Password", type="password")
-            pass2 = st.text_input("Confirm Password", type="password")
-            submit = st.form_submit_button("Submit Request")
-
-            if submit:
-                if not all([name_in, user_in, email_in, pass_in]):
-                    st.error("All fields required")
-                elif pass_in != pass2:
-                    st.error("Passwords don't match")
-                elif user_in in config['credentials']['usernames']:
-                    st.error("Username taken")
-                else:
-                    pending.append({"name": name_in, "username": user_in, "email": email_in, "password": pass_in})
-                    with open(PENDING_FILE, 'w') as f:
-                        yaml.dump(pending, f)
-
-                    approve = f"{APP_URL}/?admin=approve&action=approve&user={user_in}"
-                    reject = f"{APP_URL}/?admin=approve&action=reject&user={user_in}"
-
-                    html = f"""
-                    <h2>New User Request</h2>
-                    <p><b>Name:</b> {name_in}<br>
-                    <b>Username:</b> {user_in}<br>
-                    <b>Email:</b> {email_in}</p>
-                    <br>
-                    <a href="{approve}" style="background:#28a745;color:white;padding:15px 30px;text-decoration:none;border-radius:8px;font-size:18px;">APPROVE</a>
-                    &nbsp;&nbsp;
-                    <a href="{reject}" style="background:#dc3545;color:white;padding:15px 30px;text-decoration:none;border-radius:8px;font-size:18px;">REJECT</a>
-                    """
-
-                    if send_email(ADMIN_EMAIL, "New User Request - Action Needed", html):
-                        st.success("Request sent! Admin will review.")
-                    else:
-                        st.warning("Request saved (email failed)")
 # ───────────────────── THEME SETTINGS (LIGHT MODE) ─────────────────────
 main_bg = "#f1f5f9"      # Light Grey Background
 card_bg = "#ffffff"      # White Cards
