@@ -1,55 +1,49 @@
 import streamlit as st
 import pandas as pd
+import gspread
+from google.oauth2.service_account import Credentials
 import uuid
-import requests
 
 # ------------------------------
-# GOOGLE SHEET DETAILS
+# GOOGLE SHEET SETTINGS
 # ------------------------------
 SHEET_ID = "1BD-Bww-k_3jVwJAGqBbs02YcOoUyNrOWcY_T9xvnbgY"
 SHEET_NAME = "User"
-CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={SHEET_NAME}"
-
-# Your Google Apps Script Web App URL
-SCRIPT_URL = "YOUR_WEB_APP_URL_HERE"  # Replace this
-
 
 # ------------------------------
-# LOAD ALL USERS
+# GOOGLE AUTHENTICATION
+# ------------------------------
+creds = Credentials.from_service_account_file(
+    "service_account.json",
+    scopes=["https://www.googleapis.com/auth/spreadsheets"]
+)
+client = gspread.authorize(creds)
+sheet = client.open_by_key(SHEET_ID).worksheet(SHEET_NAME)
+
+# ------------------------------
+# LOAD USERS
 # ------------------------------
 def load_users():
-    try:
-        df = pd.read_csv(CSV_URL)
-        return df
-    except:
-        return pd.DataFrame(columns=["id", "name", "email", "password"])
-
+    data = sheet.get_all_records()
+    return pd.DataFrame(data)
 
 # ------------------------------
-# SAVE USER IN GOOGLE SHEET
+# ADD USER TO SHEET
 # ------------------------------
-def save_user(name, email, password):
+def add_user(name, email, password):
     new_id = str(uuid.uuid4())
-    params = {
-        "type": "add_user",
-        "id": new_id,
-        "name": name,
-        "email": email,
-        "password": password
-    }
-    requests.get(SCRIPT_URL, params=params)
-
+    row = [new_id, name, email.lower(), password]
+    sheet.append_row(row)
 
 # ------------------------------
 # UI
 # ------------------------------
-st.title("User Login System")
+st.title("Login System")
 
 page = st.sidebar.selectbox("Menu", ["Signup", "Login"])
 
-
 # ------------------------------
-# SIGNUP PAGE
+# SIGNUP
 # ------------------------------
 if page == "Signup":
     st.subheader("Create Account")
@@ -61,18 +55,17 @@ if page == "Signup":
     if st.button("Sign Up"):
         users = load_users()
 
-        if email in users["email"].astype(str).values:
-            st.error("Email already exists")
+        if not users.empty and email.lower() in users["email"].astype(str).str.lower().values:
+            st.error("Email already registered")
         else:
-            save_user(name, email, password)
-            st.success("Account created")
-
+            add_user(name, email, password)
+            st.success("Account created successfully")
 
 # ------------------------------
-# LOGIN PAGE
+# LOGIN
 # ------------------------------
 if page == "Login":
-    st.subheader("Sign In")
+    st.subheader("Login")
 
     email = st.text_input("Email")
     password = st.text_input("Password", type="password")
@@ -80,13 +73,15 @@ if page == "Login":
     if st.button("Login"):
         users = load_users()
 
-        row = users[
-            (users["email"] == email) &
-            (users["password"] == password)
-        ]
-
-        if len(row) == 1:
-            st.success("Login successful")
+        if users.empty:
+            st.error("No users found")
         else:
-            st.error("Wrong email or password")
+            user = users[
+                (users["email"].str.lower() == email.lower()) &
+                (users["password"] == password)
+            ]
 
+            if len(user) == 1:
+                st.success("Login Successful")
+            else:
+                st.error("Invalid email or password")
