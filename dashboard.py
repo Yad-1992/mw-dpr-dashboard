@@ -1,4 +1,4 @@
-# dashboard.py — FINAL INTEGRATED VERSION (Auth + Dashboard)
+# dashboard.py — FINAL FIXED VERSION (Updated for Streamlit Authenticator v0.3+)
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -8,6 +8,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 import streamlit_authenticator as stauth
+from streamlit_authenticator.utilities.hasher import Hasher # <--- FIX: Explicit Import
 from yaml.loader import SafeLoader
 
 # ───────────────────── 1. PAGE CONFIG (MUST BE FIRST) ─────────────────────
@@ -17,7 +18,6 @@ st.set_page_config(page_title="AP-TG MW DPR", page_icon="📡", layout="wide")
 
 # --- CONFIGURATION (EDIT THESE) ---
 ADMIN_EMAIL = "nirmalasahoongrh@gmail.com"  # The admin who receives approval requests
-# For emails to work, you need to configure the SMTP section in the 'Sign Up' block below.
 
 # File Paths
 USERS_FILE = "users.yaml"
@@ -27,15 +27,18 @@ PENDING_FILE = "pending_requests.yaml"
 try:
     with open(USERS_FILE) as file:
         users_config = yaml.load(file, Loader=SafeLoader)
-except FileNotFoundError:
+except (FileNotFoundError, IndexError, TypeError):
     # Create default admin if file missing
+    # FIX: Generating hash using the correct imported class
+    hashed_pass = Hasher(['admin123']).generate()[0] 
+    
     users_config = {
         'credentials': {
             'usernames': {
                 'admin': {
                     'name': 'Admin User',
                     'email': ADMIN_EMAIL,
-                    'password': stauth.Hasher(['admin123']).generate()[0], # Default: admin123
+                    'password': hashed_pass,
                     'logged_in': False
                 }
             }
@@ -66,8 +69,8 @@ authenticator = stauth.Authenticate(
 if st.query_params.get("admin") == "approve":
     st.title("🛡️ Admin Approval Panel")
     
-    # Check if current user is admin (optional security layer)
-    # For simplicity in this snippets, we assume possession of the link + admin login implies authority
+    # Simple security check: Require admin login logic or just obfuscation via URL
+    # Ideally, you check st.session_state["authentication_status"] here too.
     
     if not pending_requests:
         st.info("No pending sign-up requests.")
@@ -82,8 +85,9 @@ if st.query_params.get("admin") == "approve":
                     st.write(f"**Date:** {req['requested_at']}")
                 with c2:
                     if st.button("✅ Approve", key=f"app_{i}"):
-                        # Add to users.yaml
-                        hashed_pw = stauth.Hasher([req['password']]).generate()[0]
+                        # FIX: Hash password using Hasher class
+                        hashed_pw = Hasher([req['password']]).generate()[0]
+                        
                         users_config['credentials']['usernames'][req['username']] = {
                             'name': req['name'],
                             'email': req['email'],
@@ -114,19 +118,19 @@ if st.query_params.get("admin") == "approve":
 
 # ───────────────────── 4. LOGIN / SIGN UP FLOW ─────────────────────
 
-# Check Login Status
-# Note: Syntax for 'login' changes slightly in newer streamlit-authenticator versions. 
-# This handles the most common version.
+# Login Widget
+# Note: 'login' returns 3 values. We use 'main' as form location.
 name, authentication_status, username = authenticator.login('main')
 
 if authentication_status is False:
     st.error("Username/password is incorrect")
 elif authentication_status is None:
     # --- SHOW SIGN UP TAB ONLY IF NOT LOGGED IN ---
-    tab_login, tab_signup = st.tabs(["🔐 Login", "📝 Sign Up"])
+    st.markdown("---")
+    tab_login, tab_signup = st.tabs(["🔐 Login Instructions", "📝 Create Account"])
     
     with tab_login:
-        st.info("Please enter your username and password above.")
+        st.info("Please enter your username and password above to login.")
         
     with tab_signup:
         st.header("Request Access")
@@ -158,34 +162,36 @@ elif authentication_status is None:
                     with open(PENDING_FILE, 'w') as f:
                         yaml.dump(pending_requests, f)
                     
-                    # --- SEND EMAIL (SMTP CONFIGURATION) ---
+                    # --- SEND EMAIL ---
                     try:
-                        # ⚠️ UPDATE YOUR CREDENTIALS HERE ⚠️
-                        sender_email = "nirmalasahoongrh@gmail.com" # Your Gmail
-                        sender_password = "xxxx xxxx xxxx xxxx"       # Your App Password
+                        # ⚠️ FILL THIS IN FOR EMAILS TO WORK ⚠️
+                        sender_email = "nirmalasahoongrh@gmail.com" 
+                        sender_password = "YOUR_APP_PASSWORD_HERE" # <--- IMPORTANT: App Password
                         
-                        msg = MIMEMultipart()
-                        msg['From'] = sender_email
-                        msg['To'] = ADMIN_EMAIL
-                        msg['Subject'] = f"New Dashboard Access: {new_name}"
-                        
-                        body = f"""
-                        <h3>New User Request</h3>
-                        <p>User: {new_user}</p>
-                        <p>Name: {new_name}</p>
-                        <a href='https://ap-mw-dpr-dashboard.streamlit.app/?admin=approve'>Click to Approve</a>
-                        """
-                        msg.attach(MIMEText(body, 'html'))
-                        
-                        server = smtplib.SMTP('smtp.gmail.com', 587)
-                        server.starttls()
-                        server.login(sender_email, sender_password)
-                        server.send_message(msg)
-                        server.quit()
-                        st.success("Request sent to Admin! You will be notified upon approval.")
+                        if "YOUR_APP_PASSWORD" not in sender_password:
+                            msg = MIMEMultipart()
+                            msg['From'] = sender_email
+                            msg['To'] = ADMIN_EMAIL
+                            msg['Subject'] = f"New Dashboard Access: {new_name}"
+                            
+                            body = f"""
+                            <h3>New User Request</h3>
+                            <p>User: {new_user}</p>
+                            <p>Name: {new_name}</p>
+                            <a href='https://ap-mw-dpr-dashboard.streamlit.app/?admin=approve'>Click to Approve</a>
+                            """
+                            msg.attach(MIMEText(body, 'html'))
+                            
+                            server = smtplib.SMTP('smtp.gmail.com', 587)
+                            server.starttls()
+                            server.login(sender_email, sender_password)
+                            server.send_message(msg)
+                            server.quit()
+                            st.success("Request sent to Admin! You will be notified upon approval.")
+                        else:
+                            st.success("Request Saved! (Email not configured, please contact admin manually)")
                     except Exception as e:
-                        st.warning("Request saved, but email failed to send. Admin will check manually.")
-                        # print(e) # For debugging logs
+                        st.warning("Request saved, but email failed. Please contact admin.")
                         
     st.stop() # Stop execution here if not logged in
 
