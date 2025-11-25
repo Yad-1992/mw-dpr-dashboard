@@ -30,7 +30,7 @@ USERS_SHEET_NAME = "User"
 CSV_URL_USERS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={USERS_SHEET_NAME}"
 
 # Paste your deployed Google Apps Script web app URL (from Deploy -> Web app)
-DEPLOY_URL = "PASTE_YOUR_DEPLOY_URL_HERE"
+DEPLOY_URL = "https://mw-dpr-dashboard.streamlit.app/"
 
 # Admin credentials (change password)
 ADMIN_EMAIL = "nirmalasahoongrh@gmail.com"
